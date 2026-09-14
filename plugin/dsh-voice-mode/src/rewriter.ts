@@ -164,7 +164,7 @@ export interface RewriteResult {
 }
 
 /** 提示词/行为版本：改变提示词、协议或后处理时递增；缓存键含它，避免跨版本复用旧讲稿。 */
-const PROMPT_VERSION = 'sp6'
+const PROMPT_VERSION = 'sp7'
 
 /** 各片段类型的任务说明（放进请求 JSON 的 task 字段）。 */
 const KIND_INSTRUCTIONS: Record<RewriteKind, string> = {
