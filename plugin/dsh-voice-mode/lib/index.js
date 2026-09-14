@@ -13718,6 +13718,160 @@ var ESCAPED = {
   "\\!": "",
   "\\:": ""
 };
+var CHEM_ELEMENTS = {
+  H: "\u6C22",
+  He: "\u6C26",
+  Li: "\u9502",
+  Be: "\u94CD",
+  B: "\u787C",
+  C: "\u78B3",
+  N: "\u6C2E",
+  O: "\u6C27",
+  F: "\u6C1F",
+  Ne: "\u6C16",
+  Na: "\u94A0",
+  Mg: "\u9541",
+  Al: "\u94DD",
+  Si: "\u7845",
+  P: "\u78F7",
+  S: "\u786B",
+  Cl: "\u6C2F",
+  Ar: "\u6C29",
+  K: "\u94BE",
+  Ca: "\u9499",
+  Sc: "\u94AA",
+  Ti: "\u949B",
+  V: "\u9492",
+  Cr: "\u94EC",
+  Mn: "\u9530",
+  Fe: "\u94C1",
+  Co: "\u94B4",
+  Ni: "\u954D",
+  Cu: "\u94DC",
+  Zn: "\u950C",
+  Ga: "\u9553",
+  Ge: "\u9517",
+  As: "\u7837",
+  Se: "\u7852",
+  Br: "\u6EB4",
+  Kr: "\u6C2A",
+  Rb: "\u94F7",
+  Sr: "\u9536",
+  Y: "\u9487",
+  Zr: "\u9506",
+  Nb: "\u94CC",
+  Mo: "\u94BC",
+  Tc: "\u951D",
+  Ru: "\u948C",
+  Rh: "\u94D1",
+  Pd: "\u94AF",
+  Ag: "\u94F6",
+  Cd: "\u9549",
+  In: "\u94DF",
+  Sn: "\u9521",
+  Sb: "\u9511",
+  Te: "\u78B2",
+  I: "\u7898",
+  Xe: "\u6C19",
+  Cs: "\u94EF",
+  Ba: "\u94A1",
+  La: "\u9567",
+  Ce: "\u94C8",
+  Pr: "\u9568",
+  Nd: "\u9495",
+  Pm: "\u94B7",
+  Sm: "\u9490",
+  Eu: "\u94D5",
+  Gd: "\u9486",
+  Tb: "\u94FD",
+  Dy: "\u955D",
+  Ho: "\u94AC",
+  Er: "\u94D2",
+  Tm: "\u94E5",
+  Yb: "\u9571",
+  Lu: "\u9565",
+  Hf: "\u94EA",
+  Ta: "\u94BD",
+  W: "\u94A8",
+  Re: "\u94FC",
+  Os: "\u9507",
+  Ir: "\u94F1",
+  Pt: "\u94C2",
+  Au: "\u91D1",
+  Hg: "\u6C5E",
+  Tl: "\u94CA",
+  Pb: "\u94C5",
+  Bi: "\u94CB",
+  Po: "\u948B",
+  At: "\u7839",
+  Rn: "\u6C21",
+  Fr: "\u94AB",
+  Ra: "\u956D",
+  Ac: "\u9515",
+  Th: "\u948D",
+  Pa: "\u9564",
+  U: "\u94C0",
+  Np: "\u954E",
+  Pu: "\u949A",
+  Am: "\u9545",
+  Cm: "\u9514"
+};
+var CHEM_STATES = {
+  aq: "\u6C34\u6EB6\u6DB2",
+  s: "\u56FA\u6001",
+  l: "\u6DB2\u6001",
+  g: "\u6C14\u6001",
+  v: "\u6C14\u6001"
+};
+var CHEM_ARROWS = [
+  ["<=>>", "\u53EF\u9006\u751F\u6210"],
+  ["<<=>", "\u53EF\u9006\u751F\u6210"],
+  ["<=>", "\u53EF\u9006\u751F\u6210"],
+  ["<->", "\u53EF\u9006\u751F\u6210"],
+  ["->", "\u751F\u6210"],
+  ["<-", "\u751F\u6210"],
+  ["\u21CC", "\u53EF\u9006\u751F\u6210"],
+  ["\u2192", "\u751F\u6210"],
+  ["\u2190", "\u751F\u6210"]
+];
+var PU_UNITS = {
+  kJ: "\u5343\u7126",
+  J: "\u7126",
+  mol: "\u6469\u5C14",
+  mmol: "\u6BEB\u6469\u5C14",
+  g: "\u514B",
+  kg: "\u5343\u514B",
+  mg: "\u6BEB\u514B",
+  L: "\u5347",
+  mL: "\u6BEB\u5347",
+  s: "\u79D2",
+  ms: "\u6BEB\u79D2",
+  min: "\u5206\u949F",
+  h: "\u5C0F\u65F6",
+  K: "\u5F00\u5C14\u6587",
+  Pa: "\u5E15",
+  kPa: "\u5343\u5E15",
+  MPa: "\u5146\u5E15",
+  atm: "\u6807\u51C6\u5927\u6C14\u538B",
+  M: "\u6469\u5C14\u6BCF\u5347",
+  nm: "\u7EB3\u7C73",
+  \u00B5m: "\u5FAE\u7C73",
+  mm: "\u6BEB\u7C73",
+  cm: "\u5398\u7C73",
+  km: "\u5343\u7C73",
+  m: "\u7C73",
+  W: "\u74E6",
+  kW: "\u5343\u74E6",
+  V: "\u4F0F",
+  mV: "\u6BEB\u4F0F",
+  A: "\u5B89",
+  mA: "\u6BEB\u5B89",
+  Hz: "\u8D6B\u5179",
+  N: "\u725B",
+  C: "\u5E93\u4ED1",
+  "\xB0C": "\u6444\u6C0F\u5EA6",
+  \u00C5: "\u57C3"
+};
 function skipWs(s, i) {
   let j = i;
   while (j < s.length && /\s/.test(s[j])) j++;
@@ -13761,6 +13915,204 @@ function readParen(s, i) {
 }
 function joinParts(parts) {
   return parts.filter((p) => p !== "").join(" ").replace(/\s+/g, " ").trim();
+}
+function chargeWord(body) {
+  const digits = /[0-9]+/.exec(body)?.[0] ?? "1";
+  const sign = body.includes("-") ? "\u8D1F" : "\u6B63";
+  return sign + " " + digits + " \u4EF7";
+}
+function renderChem(src) {
+  const s = src.replace(/\s+/g, " ").trim();
+  const parts = [];
+  let i = 0;
+  while (i < s.length) {
+    const c = s[i];
+    if (c === " ") {
+      i++;
+      continue;
+    }
+    const arrow = CHEM_ARROWS.find(([token]) => s.startsWith(token, i));
+    if (arrow) {
+      parts.push(arrow[1]);
+      i += arrow[0].length;
+      continue;
+    }
+    const state = /^\((aq|s|l|g|v)\)/.exec(s.slice(i));
+    if (state) {
+      parts.push(CHEM_STATES[state[1]] ?? "");
+      i += state[0].length;
+      continue;
+    }
+    if (c === "^") {
+      let j = i + 1;
+      let body = "";
+      if (s[j] === "{") {
+        const a = readArg(s, j);
+        body = a.text;
+        j = a.next;
+      } else {
+        const m = /^[0-9+\-]+/.exec(s.slice(j));
+        body = m ? m[0] : "";
+        j += body.length;
+      }
+      if (/[+\-]/.test(body)) {
+        parts.push(chargeWord(body));
+        i = j;
+        continue;
+      }
+      parts.push("\u6C14\u4F53");
+      i++;
+      continue;
+    }
+    if (c === "v" && !/[a-zA-Z]/.test(s[i + 1] ?? "")) {
+      parts.push("\u6C89\u6DC0");
+      i++;
+      continue;
+    }
+    if (c === "_" || c === "{") {
+      const a = readArg(s, c === "_" ? i + 1 : i);
+      parts.push(renderChem(a.text));
+      i = a.next;
+      continue;
+    }
+    if (c === "}") {
+      i++;
+      continue;
+    }
+    if (c === "\\") {
+      const m = /^\\([a-zA-Z]+)/.exec(s.slice(i));
+      if (m) {
+        const n = m[1];
+        if (n === "text" || n === "mathrm" || n === "mathit" || n === "mathbf" || n === "mathsf") {
+          const a = readArg(s, i + m[0].length);
+          parts.push(a.text.trim());
+          i = a.next;
+          continue;
+        }
+        if (n === "to" || n === "rightarrow" || n === "longrightarrow" || n === "leftarrow" || n === "longleftarrow") {
+          parts.push("\u751F\u6210");
+        } else if (n === "rightleftharpoons" || n === "leftrightharpoons") {
+          parts.push("\u53EF\u9006\u751F\u6210");
+        } else {
+          parts.push(OPERATORS[n] ?? n);
+        }
+        i += m[0].length;
+        continue;
+      }
+      i++;
+      continue;
+    }
+    const el = /^[A-Z][a-z]?/.exec(s.slice(i));
+    if (el) {
+      parts.push(CHEM_ELEMENTS[el[0]] ?? el[0]);
+      i += el[0].length;
+      continue;
+    }
+    if (c === "+") {
+      parts.push("\u52A0");
+      i++;
+      continue;
+    }
+    if (c === "=") {
+      parts.push("\u7B49\u4E8E");
+      i++;
+      continue;
+    }
+    if (c === ".") {
+      parts.push("\u70B9");
+      i++;
+      continue;
+    }
+    if (c === "*") {
+      parts.push("\u4E58");
+      i++;
+      continue;
+    }
+    if (c === "~") {
+      parts.push("\u7EA6");
+      i++;
+      continue;
+    }
+    if (c === "," || c === ";") {
+      parts.push("\uFF0C");
+      i++;
+      continue;
+    }
+    const num = /^[0-9]+/.exec(s.slice(i));
+    if (num) {
+      parts.push(num[0]);
+      i += num[0].length;
+      continue;
+    }
+    parts.push(c);
+    i++;
+  }
+  return joinParts(parts);
+}
+function renderUnit(src) {
+  const s = src;
+  const parts = [];
+  const unitKeys = Object.keys(PU_UNITS).sort((a, b) => b.length - a.length);
+  let i = 0;
+  while (i < s.length) {
+    const c = s[i];
+    if (/\s/.test(c)) {
+      i++;
+      continue;
+    }
+    const num = /^[+\-]?[0-9]+(?:\.[0-9]+)?(?:[eE][+\-]?[0-9]+)?/.exec(s.slice(i));
+    if (num) {
+      parts.push(num[0]);
+      i += num[0].length;
+      continue;
+    }
+    if (c === "\\") {
+      const m = /^\\([a-zA-Z]+)/.exec(s.slice(i));
+      if (m) {
+        parts.push(OPERATORS[m[1]] ?? m[1]);
+        i += m[0].length;
+        continue;
+      }
+      i++;
+      continue;
+    }
+    if (c === "/") {
+      parts.push("\u6BCF");
+      i++;
+      continue;
+    }
+    if (c === "^") {
+      const a = readArg(s, i + 1);
+      parts.push("\u7684 " + renderUnit(a.text) + " \u6B21\u65B9");
+      i = a.next;
+      continue;
+    }
+    if (c === "*") {
+      parts.push("\u4E58");
+      i++;
+      continue;
+    }
+    if (c === ".") {
+      parts.push("\u70B9");
+      i++;
+      continue;
+    }
+    const unit = /^[A-Za-zµΩÅ°]+/.exec(s.slice(i));
+    if (unit) {
+      const hit = unitKeys.find((k) => s.startsWith(k, i));
+      if (hit) {
+        parts.push(PU_UNITS[hit]);
+        i += hit.length;
+      } else {
+        parts.push(unit[0]);
+        i += unit[0].length;
+      }
+      continue;
+    }
+    parts.push(c);
+    i++;
+  }
+  return joinParts(parts);
 }
 function renderComplexity(tex) {
   const s = tex.replace(/\\(log|lg|ln)\b/g, " $1 ").replace(/\s+/g, " ").replace(/([A-Za-z0-9])\s+(?=(?:log|lg|ln)\b)/g, "$1 \\cdot ");
@@ -13815,6 +14167,20 @@ function render(s) {
           flush();
           const a = readArg(s, j);
           parts.push(a.text.trim());
+          i = a.next;
+          continue;
+        }
+        if (name2 === "ce") {
+          flush();
+          const a = readArg(s, j);
+          parts.push(renderChem(a.text));
+          i = a.next;
+          continue;
+        }
+        if (name2 === "pu") {
+          flush();
+          const a = readArg(s, j);
+          parts.push(renderUnit(a.text));
           i = a.next;
           continue;
         }
