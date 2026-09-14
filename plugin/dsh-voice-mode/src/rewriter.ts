@@ -164,7 +164,7 @@ export interface RewriteResult {
 }
 
 /** 提示词/行为版本：改变提示词、协议或后处理时递增；缓存键含它，避免跨版本复用旧讲稿。 */
-const PROMPT_VERSION = 'sp7'
+const PROMPT_VERSION = 'sp9'
 
 /** 各片段类型的任务说明（放进请求 JSON 的 task 字段）。 */
 const KIND_INSTRUCTIONS: Record<RewriteKind, string> = {
@@ -177,7 +177,8 @@ const KIND_INSTRUCTIONS: Record<RewriteKind, string> = {
   code:
     '这是代码片段。用一两句话概括它的作用与关键步骤；不要逐行朗读，也不要念出整段代码；变量名与关键数字要保留。',
   table:
-    '这是表格。先用一句话概括整张表表达的内容，再用自然口语转述关键列名与数值，数字必须准确。',
+    '这是表格。先用一句话概括整张表表达的内容，再用自然口语转述关键列名与数值，数字必须准确。' +
+    '表里的公式与复杂度记号一律按读法规则念成中文（O(n^2) 读「大 O，n 的平方」），不要保留英文括号记号。',
 }
 
 /**
@@ -239,11 +240,18 @@ const SYSTEM_PROMPT = [
   '19. O(...) 读「大 O，…」：O(n^2) 读「大 O，n 的平方」，O(n) 读「大 O，n」，',
   'O(n log n) 读「大 O，n 乘 log n」（log 读英文单词，不要拆成字母），O(1) 读「大 O，常数」，',
   'O(n log k) 读「大 O，n 乘 log k」。Ω(...) 读「大 Omega，…」，Θ(...) 读「大 Theta，…」。',
+  '其它常见记号：n! 读「n 的阶乘」；以 2 为底 n 的对数读「以 2 为底 n 的对数」；',
+  '偏导数读「Q 对 x 的偏导」；面积元读「面积元」；带箭头的字母读「向量 F」。',
+  '无论什么类型（含表格、整句出稿），speech 里都不得保留 O(n)、O(n^2)、n!、偏导记号、d x 这类排版记号。',
   '20. 不要输出「左括号」「右括号」「左方括号」「右方括号」这类逐符号读法；括号里的内容直接连着念。',
   '21. 当 task 是「行内公式」时：只念公式本身，绝不要复述 segment.sentence（整句的其余部分',
   '已经在正文里念过了），也不要带上公式前后的说明词（例如「平均/最坏」「最好」「如果」）。',
   '22. 当 task 是「含行内公式的完整一句」时：输出整句的朗读稿——公式按上面的读法念成中文，',
-  '其余文字保持原意与顺序，不要概括、不要增删、不要重复任何部分。',
+  '其余文字保持原意与顺序。允许合并重复信息：公式译文若与紧跟其后的说明词',
+  '（「表示…」「即…」「等于…」「是…」）说的是同一件事，只保留一处，不要连念两遍。',
+  '不要概括、不要增删事实。',
+  '23. 上面那条的实例：公式后紧跟「是 D 的边界」时只念「L 等于 D 的边界」；',
+  '公式后紧跟「表示沿闭曲线积分」时只念「沿闭曲线积分」，不要念成「沿闭曲线积分表示沿闭曲线积分」。',
 ].join('\n')
 
 /** 抽取需要保安全的数字 token。 */
@@ -531,24 +539,41 @@ export class SpeechRewriter {
       }
     }
 
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), this.opts.timeoutMs)
-    try {
-      const url = this.opts.baseUrl.replace(/\/+$/, '') + '/chat/completions'
-      const apiKey = typeof this.opts.apiKey === 'function' ? await this.opts.apiKey() : this.opts.apiKey
-      const headers: Record<string, string> = { 'content-type': 'application/json' }
-      if (apiKey) headers.authorization = 'Bearer ' + apiKey
-      const user = buildUserPayload(req)
-      const maxTokens = this.maxTokensFor(text)
+    const url = this.opts.baseUrl.replace(/\/+$/, '') + '/chat/completions'
+    const apiKey = typeof this.opts.apiKey === 'function' ? await this.opts.apiKey() : this.opts.apiKey
+    const headers: Record<string, string> = { 'content-type': 'application/json' }
+    if (apiKey) headers.authorization = 'Bearer ' + apiKey
+    const user = buildUserPayload(req)
+    const maxTokens = this.maxTokensFor(text)
 
-      let call = await this.callModel(url, headers, user, maxTokens, controller.signal, this.opts.jsonMode)
-      // 端点不认 response_format（400/422）时：去掉它重试一次，兼容只支持纯提示词的端点。
-      if (call.content === null && this.opts.jsonMode && call.status !== 200) {
-        call = await this.callModel(url, headers, user, maxTokens, controller.signal, false)
+    // 偶发网络/超时/5xx 会让整段白退化成「表格 N 行 M 列」这类兜底（实测：11×7 复杂度表
+    // 就撞过一次），所以重试一次再放弃；4xx（鉴权/参数）不重试。
+    let rawContent: string | null = null
+    for (let attempt = 0; attempt < 2 && rawContent === null; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 400))
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), this.opts.timeoutMs)
+      try {
+        let call = await this.callModel(url, headers, user, maxTokens, controller.signal, this.opts.jsonMode)
+        // 端点不认 response_format（400/422）时：去掉它再试一次，兼容只支持纯提示词的端点。
+        if (call.content === null && this.opts.jsonMode && call.status !== 200) {
+          call = await this.callModel(url, headers, user, maxTokens, controller.signal, false)
+        }
+        if (call.content !== null) {
+          rawContent = call.content
+        } else if (call.status >= 400 && call.status < 500) {
+          break
+        }
+      } catch {
+        // 网络/超时：留给下一轮
+      } finally {
+        clearTimeout(timer)
       }
-      if (call.content === null) return null
+    }
+    if (rawContent === null) return null
 
-      const parsed = parseSpeechResponse(call.content)
+    try {
+      const parsed = parseSpeechResponse(rawContent)
       if (!parsed) return null
 
       // --- 守卫：档位可调 + 用户放行规则（guardMode=off 或任一规则命中即全部跳过）---
@@ -591,8 +616,6 @@ export class SpeechRewriter {
         : { text: stored.text, cached: false }
     } catch {
       return null
-    } finally {
-      clearTimeout(timer)
     }
   }
 

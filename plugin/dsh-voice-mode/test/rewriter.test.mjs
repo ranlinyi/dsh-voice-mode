@@ -261,6 +261,27 @@ await t('kind=sentence：整句出稿不触发复述守卫（模型本就该贴�
   assert.equal(res.text, speech)
 })
 
+await t('偶发网络失败：自动重试一次（不再整段回退）', async () => {
+  let calls = 0
+  const flaky = async () => {
+    calls++
+    if (calls === 1) throw new Error('network down')
+    return { ok: true, json: async () => ({ choices: [{ message: { content: J({ speech: 'v 的 2 次方' }) } }] }) }
+  }
+  const r = new SpeechRewriter({ baseUrl: 'https://x.test/v1', apiKey: '', model: 'm', fetchImpl: flaky })
+  const res = await r.rewrite({ kind: 'inline-math', text: 'v^2' })
+  assert.ok(res, '重试后应成功')
+  assert.equal(calls, 2)
+})
+
+await t('连续失败：重试用尽后回退 null，且最多两次', async () => {
+  let calls = 0
+  const always = async () => { calls++; throw new Error('down') }
+  const r = new SpeechRewriter({ baseUrl: 'https://x.test/v1', apiKey: '', model: 'm', fetchImpl: always })
+  assert.equal(await r.rewrite({ kind: 'inline-math', text: 'v^2' }), null)
+  assert.equal(calls, 2)
+})
+
 await t('端点不认 response_format（400）：去掉后重试一次', async () => {
   let calls = 0
   const f = async (_url, init) => {

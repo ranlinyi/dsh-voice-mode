@@ -13922,7 +13922,9 @@ function tableFallback(seg) {
   const headers = rows[0] ? rows[0].join("\u3001") : "";
   const rowCount = seg.meta && seg.meta.rowCount !== void 0 ? seg.meta.rowCount : rows.length;
   const colCount = seg.meta && seg.meta.colCount !== void 0 ? seg.meta.colCount : 0;
-  return "\u8868\u683C\uFF1A" + rowCount + " \u884C " + colCount + " \u5217\u3002\u5217\u540D\uFF1A" + headers + "\u3002";
+  const head = "\u8868\u683C\uFF1A" + rowCount + " \u884C " + colCount + " \u5217\u3002\u5217\u540D\uFF1A" + headers + "\u3002";
+  const names = rows.slice(1).map((r) => r[0] ? r[0].trim() : "").filter((v) => v);
+  return names.length ? head + "\u884C\u540D\uFF1A" + names.slice(0, 12).join("\u3001") + "\u3002" : head;
 }
 var SYMBOL_DEF_RE = /([A-Za-z])\s*(?:表示|代表|意为|指的是)\s*([\u4e00-\u9fff]{2,10})/g;
 function splitSegmentSentences(group) {
@@ -14219,13 +14221,13 @@ function anyMatch(rules, text5) {
   }
   return false;
 }
-var PROMPT_VERSION = "sp7";
+var PROMPT_VERSION = "sp9";
 var KIND_INSTRUCTIONS = {
   "display-math": "\u8FD9\u662F\u72EC\u7ACB\u5C55\u793A\u7684\u6570\u5B66\u516C\u5F0F\u3002\u7528\u4E00\u4E24\u53E5\u8BDD\u8BF4\u660E\u5B83\u8868\u8FBE\u7684\u5173\u7CFB\uFF08\u67D0\u4E2A\u91CF\u7B49\u4E8E\u4EC0\u4E48\u3001\u968F\u4EC0\u4E48\u53D8\u5316\uFF09\uFF1B\u53EA\u6709\u5728\u542B\u4E49\u786E\u5B9E\u4E0D\u660E\u663E\u65F6\u624D\u7B80\u8981\u63D0\u5230\u5173\u952E\u7B26\u53F7\uFF0C\u4E0D\u8981\u9010\u4E2A\u7F57\u5217\u7B26\u53F7\u542B\u4E49\uFF0C\u4E5F\u4E0D\u8981\u5C55\u5F00\u63A8\u5BFC\u3002",
   "inline-math": "\u8FD9\u662F\u53E5\u5B50\u4E2D\u7684\u884C\u5185\u516C\u5F0F\u3002\u53EA\u628A\u5B83\u5FF5\u6210\u901A\u987A\u7684\u4E2D\u6587\u77ED\u8BED\uFF08\u4F8B\u5982\u300C\u4E8C\u5206\u4E4B\u4E00 m v \u5E73\u65B9\u300D\u300Cv \u7B49\u4E8E v \u96F6\u52A0 a t\u300D\uFF09\uFF0C\u4E0D\u8981\u5C55\u5F00\u89E3\u91CA\uFF0C\u4E0D\u8981\u8865\u5145\u5B9A\u4E49\uFF0C\u4E0D\u8981\u52A0\u63A8\u5BFC\u3002",
   sentence: "\u8FD9\u662F\u542B\u884C\u5185\u516C\u5F0F\u7684\u5B8C\u6574\u4E00\u53E5\u6B63\u6587\u3002\u8BF7\u8F93\u51FA**\u6574\u53E5**\u7684\u53E3\u64AD\u7A3F\uFF1A\u53E5\u4E2D\u7684\u516C\u5F0F\u6309\u8BFB\u6CD5\u89C4\u5219\u5FF5\u6210\u4E2D\u6587\uFF0C\u5176\u4F59\u6587\u5B57\u4FDD\u6301\u539F\u610F\u4E0E\u987A\u5E8F\uFF1B\u4E0D\u8981\u6982\u62EC\u3001\u4E0D\u8981\u589E\u5220\u5185\u5BB9\u3001\u4E0D\u8981\u91CD\u590D\u4EFB\u4F55\u90E8\u5206\u3002",
   code: "\u8FD9\u662F\u4EE3\u7801\u7247\u6BB5\u3002\u7528\u4E00\u4E24\u53E5\u8BDD\u6982\u62EC\u5B83\u7684\u4F5C\u7528\u4E0E\u5173\u952E\u6B65\u9AA4\uFF1B\u4E0D\u8981\u9010\u884C\u6717\u8BFB\uFF0C\u4E5F\u4E0D\u8981\u5FF5\u51FA\u6574\u6BB5\u4EE3\u7801\uFF1B\u53D8\u91CF\u540D\u4E0E\u5173\u952E\u6570\u5B57\u8981\u4FDD\u7559\u3002",
-  table: "\u8FD9\u662F\u8868\u683C\u3002\u5148\u7528\u4E00\u53E5\u8BDD\u6982\u62EC\u6574\u5F20\u8868\u8868\u8FBE\u7684\u5185\u5BB9\uFF0C\u518D\u7528\u81EA\u7136\u53E3\u8BED\u8F6C\u8FF0\u5173\u952E\u5217\u540D\u4E0E\u6570\u503C\uFF0C\u6570\u5B57\u5FC5\u987B\u51C6\u786E\u3002"
+  table: "\u8FD9\u662F\u8868\u683C\u3002\u5148\u7528\u4E00\u53E5\u8BDD\u6982\u62EC\u6574\u5F20\u8868\u8868\u8FBE\u7684\u5185\u5BB9\uFF0C\u518D\u7528\u81EA\u7136\u53E3\u8BED\u8F6C\u8FF0\u5173\u952E\u5217\u540D\u4E0E\u6570\u503C\uFF0C\u6570\u5B57\u5FC5\u987B\u51C6\u786E\u3002\u8868\u91CC\u7684\u516C\u5F0F\u4E0E\u590D\u6742\u5EA6\u8BB0\u53F7\u4E00\u5F8B\u6309\u8BFB\u6CD5\u89C4\u5219\u5FF5\u6210\u4E2D\u6587\uFF08O(n^2) \u8BFB\u300C\u5927 O\uFF0Cn \u7684\u5E73\u65B9\u300D\uFF09\uFF0C\u4E0D\u8981\u4FDD\u7559\u82F1\u6587\u62EC\u53F7\u8BB0\u53F7\u3002"
 };
 var SYSTEM_PROMPT = [
   "\u4F60\u662F\u8BED\u97F3\u6717\u8BFB\u7A3F\u6539\u5199\u5668\uFF0C\u628A Markdown \u7247\u6BB5\u6539\u5199\u6210\u9002\u5408 TTS \u9010\u53E5\u6717\u8BFB\u7684\u53E3\u64AD\u7A3F\u3002",
@@ -14281,11 +14283,18 @@ var SYSTEM_PROMPT = [
   "19. O(...) \u8BFB\u300C\u5927 O\uFF0C\u2026\u300D\uFF1AO(n^2) \u8BFB\u300C\u5927 O\uFF0Cn \u7684\u5E73\u65B9\u300D\uFF0CO(n) \u8BFB\u300C\u5927 O\uFF0Cn\u300D\uFF0C",
   "O(n log n) \u8BFB\u300C\u5927 O\uFF0Cn \u4E58 log n\u300D\uFF08log \u8BFB\u82F1\u6587\u5355\u8BCD\uFF0C\u4E0D\u8981\u62C6\u6210\u5B57\u6BCD\uFF09\uFF0CO(1) \u8BFB\u300C\u5927 O\uFF0C\u5E38\u6570\u300D\uFF0C",
   "O(n log k) \u8BFB\u300C\u5927 O\uFF0Cn \u4E58 log k\u300D\u3002\u03A9(...) \u8BFB\u300C\u5927 Omega\uFF0C\u2026\u300D\uFF0C\u0398(...) \u8BFB\u300C\u5927 Theta\uFF0C\u2026\u300D\u3002",
+  "\u5176\u5B83\u5E38\u89C1\u8BB0\u53F7\uFF1An! \u8BFB\u300Cn \u7684\u9636\u4E58\u300D\uFF1B\u4EE5 2 \u4E3A\u5E95 n \u7684\u5BF9\u6570\u8BFB\u300C\u4EE5 2 \u4E3A\u5E95 n \u7684\u5BF9\u6570\u300D\uFF1B",
+  "\u504F\u5BFC\u6570\u8BFB\u300CQ \u5BF9 x \u7684\u504F\u5BFC\u300D\uFF1B\u9762\u79EF\u5143\u8BFB\u300C\u9762\u79EF\u5143\u300D\uFF1B\u5E26\u7BAD\u5934\u7684\u5B57\u6BCD\u8BFB\u300C\u5411\u91CF F\u300D\u3002",
+  "\u65E0\u8BBA\u4EC0\u4E48\u7C7B\u578B\uFF08\u542B\u8868\u683C\u3001\u6574\u53E5\u51FA\u7A3F\uFF09\uFF0Cspeech \u91CC\u90FD\u4E0D\u5F97\u4FDD\u7559 O(n)\u3001O(n^2)\u3001n!\u3001\u504F\u5BFC\u8BB0\u53F7\u3001d x \u8FD9\u7C7B\u6392\u7248\u8BB0\u53F7\u3002",
   "20. \u4E0D\u8981\u8F93\u51FA\u300C\u5DE6\u62EC\u53F7\u300D\u300C\u53F3\u62EC\u53F7\u300D\u300C\u5DE6\u65B9\u62EC\u53F7\u300D\u300C\u53F3\u65B9\u62EC\u53F7\u300D\u8FD9\u7C7B\u9010\u7B26\u53F7\u8BFB\u6CD5\uFF1B\u62EC\u53F7\u91CC\u7684\u5185\u5BB9\u76F4\u63A5\u8FDE\u7740\u5FF5\u3002",
   "21. \u5F53 task \u662F\u300C\u884C\u5185\u516C\u5F0F\u300D\u65F6\uFF1A\u53EA\u5FF5\u516C\u5F0F\u672C\u8EAB\uFF0C\u7EDD\u4E0D\u8981\u590D\u8FF0 segment.sentence\uFF08\u6574\u53E5\u7684\u5176\u4F59\u90E8\u5206",
   "\u5DF2\u7ECF\u5728\u6B63\u6587\u91CC\u5FF5\u8FC7\u4E86\uFF09\uFF0C\u4E5F\u4E0D\u8981\u5E26\u4E0A\u516C\u5F0F\u524D\u540E\u7684\u8BF4\u660E\u8BCD\uFF08\u4F8B\u5982\u300C\u5E73\u5747/\u6700\u574F\u300D\u300C\u6700\u597D\u300D\u300C\u5982\u679C\u300D\uFF09\u3002",
   "22. \u5F53 task \u662F\u300C\u542B\u884C\u5185\u516C\u5F0F\u7684\u5B8C\u6574\u4E00\u53E5\u300D\u65F6\uFF1A\u8F93\u51FA\u6574\u53E5\u7684\u6717\u8BFB\u7A3F\u2014\u2014\u516C\u5F0F\u6309\u4E0A\u9762\u7684\u8BFB\u6CD5\u5FF5\u6210\u4E2D\u6587\uFF0C",
-  "\u5176\u4F59\u6587\u5B57\u4FDD\u6301\u539F\u610F\u4E0E\u987A\u5E8F\uFF0C\u4E0D\u8981\u6982\u62EC\u3001\u4E0D\u8981\u589E\u5220\u3001\u4E0D\u8981\u91CD\u590D\u4EFB\u4F55\u90E8\u5206\u3002"
+  "\u5176\u4F59\u6587\u5B57\u4FDD\u6301\u539F\u610F\u4E0E\u987A\u5E8F\u3002\u5141\u8BB8\u5408\u5E76\u91CD\u590D\u4FE1\u606F\uFF1A\u516C\u5F0F\u8BD1\u6587\u82E5\u4E0E\u7D27\u8DDF\u5176\u540E\u7684\u8BF4\u660E\u8BCD",
+  "\uFF08\u300C\u8868\u793A\u2026\u300D\u300C\u5373\u2026\u300D\u300C\u7B49\u4E8E\u2026\u300D\u300C\u662F\u2026\u300D\uFF09\u8BF4\u7684\u662F\u540C\u4E00\u4EF6\u4E8B\uFF0C\u53EA\u4FDD\u7559\u4E00\u5904\uFF0C\u4E0D\u8981\u8FDE\u5FF5\u4E24\u904D\u3002",
+  "\u4E0D\u8981\u6982\u62EC\u3001\u4E0D\u8981\u589E\u5220\u4E8B\u5B9E\u3002",
+  "23. \u4E0A\u9762\u90A3\u6761\u7684\u5B9E\u4F8B\uFF1A\u516C\u5F0F\u540E\u7D27\u8DDF\u300C\u662F D \u7684\u8FB9\u754C\u300D\u65F6\u53EA\u5FF5\u300CL \u7B49\u4E8E D \u7684\u8FB9\u754C\u300D\uFF1B",
+  "\u516C\u5F0F\u540E\u7D27\u8DDF\u300C\u8868\u793A\u6CBF\u95ED\u66F2\u7EBF\u79EF\u5206\u300D\u65F6\u53EA\u5FF5\u300C\u6CBF\u95ED\u66F2\u7EBF\u79EF\u5206\u300D\uFF0C\u4E0D\u8981\u5FF5\u6210\u300C\u6CBF\u95ED\u66F2\u7EBF\u79EF\u5206\u8868\u793A\u6CBF\u95ED\u66F2\u7EBF\u79EF\u5206\u300D\u3002"
 ].join("\n");
 function extractNumbers(text5) {
   const out = [];
@@ -14536,21 +14545,35 @@ var SpeechRewriter = class _SpeechRewriter {
         return hit.symbols ? { text: hit.text, cached: true, symbols: hit.symbols } : { text: hit.text, cached: true };
       }
     }
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.opts.timeoutMs);
-    try {
-      const url = this.opts.baseUrl.replace(/\/+$/, "") + "/chat/completions";
-      const apiKey = typeof this.opts.apiKey === "function" ? await this.opts.apiKey() : this.opts.apiKey;
-      const headers = { "content-type": "application/json" };
-      if (apiKey) headers.authorization = "Bearer " + apiKey;
-      const user = buildUserPayload(req);
-      const maxTokens = this.maxTokensFor(text5);
-      let call = await this.callModel(url, headers, user, maxTokens, controller.signal, this.opts.jsonMode);
-      if (call.content === null && this.opts.jsonMode && call.status !== 200) {
-        call = await this.callModel(url, headers, user, maxTokens, controller.signal, false);
+    const url = this.opts.baseUrl.replace(/\/+$/, "") + "/chat/completions";
+    const apiKey = typeof this.opts.apiKey === "function" ? await this.opts.apiKey() : this.opts.apiKey;
+    const headers = { "content-type": "application/json" };
+    if (apiKey) headers.authorization = "Bearer " + apiKey;
+    const user = buildUserPayload(req);
+    const maxTokens = this.maxTokensFor(text5);
+    let rawContent = null;
+    for (let attempt = 0; attempt < 2 && rawContent === null; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 400));
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.opts.timeoutMs);
+      try {
+        let call = await this.callModel(url, headers, user, maxTokens, controller.signal, this.opts.jsonMode);
+        if (call.content === null && this.opts.jsonMode && call.status !== 200) {
+          call = await this.callModel(url, headers, user, maxTokens, controller.signal, false);
+        }
+        if (call.content !== null) {
+          rawContent = call.content;
+        } else if (call.status >= 400 && call.status < 500) {
+          break;
+        }
+      } catch {
+      } finally {
+        clearTimeout(timer);
       }
-      if (call.content === null) return null;
-      const parsed = parseSpeechResponse(call.content);
+    }
+    if (rawContent === null) return null;
+    try {
+      const parsed = parseSpeechResponse(rawContent);
       if (!parsed) return null;
       const mode = this.opts.guardMode;
       const allowRules = this.opts.guardAllow;
@@ -14582,8 +14605,6 @@ var SpeechRewriter = class _SpeechRewriter {
       return stored.symbols ? { text: stored.text, cached: false, symbols: stored.symbols } : { text: stored.text, cached: false };
     } catch {
       return null;
-    } finally {
-      clearTimeout(timer);
     }
   }
   /**

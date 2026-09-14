@@ -96,7 +96,13 @@ function tableFallback(seg: SpeechSegment): string {
   const headers = rows[0] ? rows[0].join('、') : ''
   const rowCount = seg.meta && seg.meta.rowCount !== undefined ? seg.meta.rowCount : rows.length
   const colCount = seg.meta && seg.meta.colCount !== undefined ? seg.meta.colCount : 0
-  return '表格：' + rowCount + ' 行 ' + colCount + ' 列。列名：' + headers + '。'
+  const head = '表格：' + rowCount + ' 行 ' + colCount + ' 列。列名：' + headers + '。'
+  // 改写失败时的兜底：至少把首列（通常是条目名）念出来，不然整张表只剩行列数。
+  const names = rows
+    .slice(1)
+    .map((r) => (r[0] ? r[0].trim() : ''))
+    .filter((v) => v)
+  return names.length ? head + '行名：' + names.slice(0, 12).join('、') + '。' : head
 }
 
 /** 正文里的显式符号定义（如「g 表示重力加速度」）；匹配不到就不猜。 */

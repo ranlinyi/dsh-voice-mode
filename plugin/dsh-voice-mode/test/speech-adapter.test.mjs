@@ -77,6 +77,18 @@ await t('表格：无改写器时回退行列/列名简述', async () => {
   assert.ok(text.includes('名称'), text)
 })
 
+await t('表格改写失败兜底：念出行列数 + 列名 + 首列条目', async () => {
+  const seen = await run(
+    { enabled: true, mathMode: 'rules', rewriter: null },
+    ['| 算法 | 最好 |\n| --- | --- |\n| 冒泡 | $O(n)$ |\n| 插入 | $O(n)$ |\n\n'],
+  )
+  const text = seen.join('')
+  assert.ok(text.includes('表格'), text)
+  assert.ok(text.includes('列名'), text)
+  assert.ok(text.includes('行名'), text)
+  assert.ok(text.includes('冒泡'), text)
+})
+
 await t('顺序：正文 → 结构片段 → 后续正文，入队顺序与原文一致', async () => {
   const fake = { rewrite: async () => ({ text: '这段代码创建了 12 个变量。', cached: false }) }
   const seen = await run(
