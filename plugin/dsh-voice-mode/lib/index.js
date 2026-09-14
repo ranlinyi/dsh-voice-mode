@@ -13925,6 +13925,30 @@ function tableFallback(seg) {
   return "\u8868\u683C\uFF1A" + rowCount + " \u884C " + colCount + " \u5217\u3002\u5217\u540D\uFF1A" + headers + "\u3002";
 }
 var SYMBOL_DEF_RE = /([A-Za-z])\s*(?:表示|代表|意为|指的是)\s*([\u4e00-\u9fff]{2,10})/g;
+function splitSegmentSentences(group) {
+  const out = [];
+  let cur = [];
+  for (const seg of group) {
+    if (seg.kind !== "prose") {
+      cur.push(seg);
+      continue;
+    }
+    const text5 = seg.text;
+    const re = /[。！？!?；;…\n]+/g;
+    let start = 0;
+    let m;
+    while ((m = re.exec(text5)) !== null) {
+      const end = m.index + m[0].length;
+      cur.push({ kind: "prose", text: text5.slice(start, end) });
+      out.push(cur);
+      cur = [];
+      start = end;
+    }
+    if (start < text5.length) cur.push({ kind: "prose", text: text5.slice(start) });
+  }
+  if (cur.length) out.push(cur);
+  return out;
+}
 var SpeechAdapter = class {
   constructor(opts) {
     this.opts = opts;
@@ -13946,12 +13970,12 @@ var SpeechAdapter = class {
       for (const s of this.segmenter.feed(delta)) this.opts.onSentence(s);
       return;
     }
-    for (const seg of this.router.feed(delta)) this.schedule(seg);
+    this.consume(this.router.feed(delta));
   }
   /** 流结束：处理未闭合结构块，并冲刷残余句子。 */
   flush() {
     if (this.opts.config().enabled) {
-      for (const seg of this.router.flush()) this.schedule(seg);
+      this.consume(this.router.flush());
     }
     this.run(() => {
       for (const s of this.segmenter.flush()) this.opts.onSentence(s, this.takePause());
@@ -13969,6 +13993,63 @@ var SpeechAdapter = class {
     const symbols = [...this.symbols.entries()].map(([sym, meaning]) => ({ sym, meaning })).slice(-12);
     if (symbols.length) ctx.symbols = symbols;
     return ctx;
+  }
+  /** 把一个块内的片段按 pause 分组，再按句处理。 */
+  consume(segs) {
+    let group = [];
+    const flushGroup = () => {
+      if (group.length) {
+        this.handleGroup(group);
+        group = [];
+      }
+    };
+    for (const seg of segs) {
+      if (seg.kind === "pause") {
+        flushGroup();
+        this.schedule(seg);
+      } else {
+        group.push(seg);
+      }
+    }
+    flushGroup();
+  }
+  /**
+   * 一个块内的片段：含行内公式时按"整句"交给模型（正文不再单独念，根治重复朗读），
+   * 不含公式的句子仍走原来的片段路径（不产生额外请求）。
+   */
+  handleGroup(group) {
+    const cfg = this.opts.config();
+    const wholeSentence = cfg.wholeSentenceMath !== false && cfg.mathMode === "model" && cfg.rewriter !== null;
+    if (!wholeSentence || !group.some((s) => s.kind === "inline-math")) {
+      for (const seg of group) this.schedule(seg);
+      return;
+    }
+    for (const sent of splitSegmentSentences(group)) {
+      if (sent.some((s) => s.kind === "inline-math")) this.scheduleSentence(sent);
+      else for (const seg of sent) this.schedule(seg);
+    }
+  }
+  /** 整句（含行内公式）交给改写器：模型返回整句口播稿，失败则回退逐片段原路径。 */
+  scheduleSentence(sent) {
+    this.run(async () => {
+      const cfg = this.opts.config();
+      const raw = sent.map((s) => s.kind === "inline-math" ? "$" + s.text + "$" : s.text).join("");
+      const text5 = raw.replace(/\s+/g, " ").trim();
+      if (!text5) return;
+      const r = cfg.rewriter ? await cfg.rewriter.rewrite({
+        kind: "sentence",
+        text: text5,
+        meta: { sentence: text5 },
+        context: this.context(text5.length)
+      }) : null;
+      if (r) {
+        for (const s of sent) if (s.kind === "prose") this.rememberProse(s.text);
+        if (r.symbols) this.learnSymbols(r.symbols);
+        this.emit(r.text);
+        return;
+      }
+      for (const seg of sent) await this.handle(seg);
+    });
   }
   schedule(seg) {
     this.run(() => this.handle(seg));
@@ -14142,6 +14223,7 @@ var PROMPT_VERSION = "sp6";
 var KIND_INSTRUCTIONS = {
   "display-math": "\u8FD9\u662F\u72EC\u7ACB\u5C55\u793A\u7684\u6570\u5B66\u516C\u5F0F\u3002\u7528\u4E00\u4E24\u53E5\u8BDD\u8BF4\u660E\u5B83\u8868\u8FBE\u7684\u5173\u7CFB\uFF08\u67D0\u4E2A\u91CF\u7B49\u4E8E\u4EC0\u4E48\u3001\u968F\u4EC0\u4E48\u53D8\u5316\uFF09\uFF1B\u53EA\u6709\u5728\u542B\u4E49\u786E\u5B9E\u4E0D\u660E\u663E\u65F6\u624D\u7B80\u8981\u63D0\u5230\u5173\u952E\u7B26\u53F7\uFF0C\u4E0D\u8981\u9010\u4E2A\u7F57\u5217\u7B26\u53F7\u542B\u4E49\uFF0C\u4E5F\u4E0D\u8981\u5C55\u5F00\u63A8\u5BFC\u3002",
   "inline-math": "\u8FD9\u662F\u53E5\u5B50\u4E2D\u7684\u884C\u5185\u516C\u5F0F\u3002\u53EA\u628A\u5B83\u5FF5\u6210\u901A\u987A\u7684\u4E2D\u6587\u77ED\u8BED\uFF08\u4F8B\u5982\u300C\u4E8C\u5206\u4E4B\u4E00 m v \u5E73\u65B9\u300D\u300Cv \u7B49\u4E8E v \u96F6\u52A0 a t\u300D\uFF09\uFF0C\u4E0D\u8981\u5C55\u5F00\u89E3\u91CA\uFF0C\u4E0D\u8981\u8865\u5145\u5B9A\u4E49\uFF0C\u4E0D\u8981\u52A0\u63A8\u5BFC\u3002",
+  sentence: "\u8FD9\u662F\u542B\u884C\u5185\u516C\u5F0F\u7684\u5B8C\u6574\u4E00\u53E5\u6B63\u6587\u3002\u8BF7\u8F93\u51FA**\u6574\u53E5**\u7684\u53E3\u64AD\u7A3F\uFF1A\u53E5\u4E2D\u7684\u516C\u5F0F\u6309\u8BFB\u6CD5\u89C4\u5219\u5FF5\u6210\u4E2D\u6587\uFF0C\u5176\u4F59\u6587\u5B57\u4FDD\u6301\u539F\u610F\u4E0E\u987A\u5E8F\uFF1B\u4E0D\u8981\u6982\u62EC\u3001\u4E0D\u8981\u589E\u5220\u5185\u5BB9\u3001\u4E0D\u8981\u91CD\u590D\u4EFB\u4F55\u90E8\u5206\u3002",
   code: "\u8FD9\u662F\u4EE3\u7801\u7247\u6BB5\u3002\u7528\u4E00\u4E24\u53E5\u8BDD\u6982\u62EC\u5B83\u7684\u4F5C\u7528\u4E0E\u5173\u952E\u6B65\u9AA4\uFF1B\u4E0D\u8981\u9010\u884C\u6717\u8BFB\uFF0C\u4E5F\u4E0D\u8981\u5FF5\u51FA\u6574\u6BB5\u4EE3\u7801\uFF1B\u53D8\u91CF\u540D\u4E0E\u5173\u952E\u6570\u5B57\u8981\u4FDD\u7559\u3002",
   table: "\u8FD9\u662F\u8868\u683C\u3002\u5148\u7528\u4E00\u53E5\u8BDD\u6982\u62EC\u6574\u5F20\u8868\u8868\u8FBE\u7684\u5185\u5BB9\uFF0C\u518D\u7528\u81EA\u7136\u53E3\u8BED\u8F6C\u8FF0\u5173\u952E\u5217\u540D\u4E0E\u6570\u503C\uFF0C\u6570\u5B57\u5FC5\u987B\u51C6\u786E\u3002"
 };
@@ -14200,8 +14282,10 @@ var SYSTEM_PROMPT = [
   "O(n log n) \u8BFB\u300C\u5927 O\uFF0Cn \u4E58 log n\u300D\uFF08log \u8BFB\u82F1\u6587\u5355\u8BCD\uFF0C\u4E0D\u8981\u62C6\u6210\u5B57\u6BCD\uFF09\uFF0CO(1) \u8BFB\u300C\u5927 O\uFF0C\u5E38\u6570\u300D\uFF0C",
   "O(n log k) \u8BFB\u300C\u5927 O\uFF0Cn \u4E58 log k\u300D\u3002\u03A9(...) \u8BFB\u300C\u5927 Omega\uFF0C\u2026\u300D\uFF0C\u0398(...) \u8BFB\u300C\u5927 Theta\uFF0C\u2026\u300D\u3002",
   "20. \u4E0D\u8981\u8F93\u51FA\u300C\u5DE6\u62EC\u53F7\u300D\u300C\u53F3\u62EC\u53F7\u300D\u300C\u5DE6\u65B9\u62EC\u53F7\u300D\u300C\u53F3\u65B9\u62EC\u53F7\u300D\u8FD9\u7C7B\u9010\u7B26\u53F7\u8BFB\u6CD5\uFF1B\u62EC\u53F7\u91CC\u7684\u5185\u5BB9\u76F4\u63A5\u8FDE\u7740\u5FF5\u3002",
-  "21. \u884C\u5185\u516C\u5F0F\u53EA\u5FF5\u516C\u5F0F\u672C\u8EAB\uFF1A\u7EDD\u4E0D\u8981\u590D\u8FF0 segment.sentence\uFF08\u6574\u53E5\u7684\u5176\u4F59\u90E8\u5206\u5DF2\u7ECF\u5728\u6B63\u6587\u91CC\u5FF5\u8FC7\u4E86\uFF09\uFF0C",
-  "\u4E5F\u4E0D\u8981\u5E26\u4E0A\u516C\u5F0F\u524D\u540E\u7684\u8BF4\u660E\u8BCD\uFF08\u4F8B\u5982\u300C\u5E73\u5747/\u6700\u574F\u300D\u300C\u6700\u597D\u300D\u300C\u5982\u679C\u300D\u300C\u5F53\u300D\uFF09\u3002\u53EA\u8F93\u51FA\u8FD9\u4E2A\u516C\u5F0F\u7684\u8BFB\u6CD5\u3002"
+  "21. \u5F53 task \u662F\u300C\u884C\u5185\u516C\u5F0F\u300D\u65F6\uFF1A\u53EA\u5FF5\u516C\u5F0F\u672C\u8EAB\uFF0C\u7EDD\u4E0D\u8981\u590D\u8FF0 segment.sentence\uFF08\u6574\u53E5\u7684\u5176\u4F59\u90E8\u5206",
+  "\u5DF2\u7ECF\u5728\u6B63\u6587\u91CC\u5FF5\u8FC7\u4E86\uFF09\uFF0C\u4E5F\u4E0D\u8981\u5E26\u4E0A\u516C\u5F0F\u524D\u540E\u7684\u8BF4\u660E\u8BCD\uFF08\u4F8B\u5982\u300C\u5E73\u5747/\u6700\u574F\u300D\u300C\u6700\u597D\u300D\u300C\u5982\u679C\u300D\uFF09\u3002",
+  "22. \u5F53 task \u662F\u300C\u542B\u884C\u5185\u516C\u5F0F\u7684\u5B8C\u6574\u4E00\u53E5\u300D\u65F6\uFF1A\u8F93\u51FA\u6574\u53E5\u7684\u6717\u8BFB\u7A3F\u2014\u2014\u516C\u5F0F\u6309\u4E0A\u9762\u7684\u8BFB\u6CD5\u5FF5\u6210\u4E2D\u6587\uFF0C",
+  "\u5176\u4F59\u6587\u5B57\u4FDD\u6301\u539F\u610F\u4E0E\u987A\u5E8F\uFF0C\u4E0D\u8981\u6982\u62EC\u3001\u4E0D\u8981\u589E\u5220\u3001\u4E0D\u8981\u91CD\u590D\u4EFB\u4F55\u90E8\u5206\u3002"
 ].join("\n");
 function extractNumbers(text5) {
   const out = [];
@@ -14477,17 +14561,19 @@ var SpeechRewriter = class _SpeechRewriter {
         const profile = GUARD_PROFILES[mode];
         if (looksLikePromptEcho(parsed.speech)) return null;
         if (!withinLengthLimit(text5, parsed.speech, profile.lengthFactor, profile.lengthBase)) return null;
-        const before = req.context && req.context.before ? req.context.before : "";
-        const sentence = req.meta && req.meta.sentence ? req.meta.sentence : "";
-        const echoRef = sentence.length > before.length ? sentence : before;
-        if (echoRef.length >= 40 && parsed.speech.length >= 40 && contextEchoRatio(parsed.speech, echoRef) >= profile.echoRatio) {
-          return null;
-        }
-        if (profile.prefixEcho && req.kind === "inline-math" && sentence) {
-          if (prefixEcho(parsed.speech, sentence, text5)) return null;
-        }
-        if (req.kind === "inline-math" && sentence) {
-          if (sentenceEchoRatio(parsed.speech, sentence, text5) >= profile.sentenceEchoRatio) return null;
+        if (req.kind !== "sentence") {
+          const before = req.context && req.context.before ? req.context.before : "";
+          const sentence = req.meta && req.meta.sentence ? req.meta.sentence : "";
+          const echoRef = sentence.length > before.length ? sentence : before;
+          if (echoRef.length >= 40 && parsed.speech.length >= 40 && contextEchoRatio(parsed.speech, echoRef) >= profile.echoRatio) {
+            return null;
+          }
+          if (profile.prefixEcho && req.kind === "inline-math" && sentence) {
+            if (prefixEcho(parsed.speech, sentence, text5)) return null;
+          }
+          if (req.kind === "inline-math" && sentence) {
+            if (sentenceEchoRatio(parsed.speech, sentence, text5) >= profile.sentenceEchoRatio) return null;
+          }
         }
         if (!verifyNumbers(text5, parsed.speech)) return null;
       }
@@ -15331,6 +15417,7 @@ var VOICE_SETTINGS_DEFAULTS = {
   guardMode: "standard",
   guardAllowRules: "",
   blockPauseMs: 350,
+  wholeSentenceMath: true,
   mathMode: "rules"
 };
 function createVoiceSettingsSchema(defs) {
@@ -15375,6 +15462,7 @@ function createVoiceSettingsSchema(defs) {
     guardMode: z.union([z.const("off"), z.const("lenient"), z.const("standard"), z.const("strict")]).default(d.guardMode).description("\u6539\u5199\u5B88\u536B\u5F3A\u5EA6\uFF1Astandard \u9ED8\u8BA4 / lenient \u653E\u5BBD\uFF08\u66F4\u96BE\u89E6\u53D1\u56DE\u9000\uFF09/ strict \u6536\u7D27 / off \u5168\u5173\uFF08\u53EA\u4FDD\u7559 JSON \u534F\u8BAE\u89E3\u6790\uFF0C\u98CE\u9669\u81EA\u8D1F\uFF09"),
     guardAllowRules: z.string().default(d.guardAllowRules).description("\u81EA\u5B9A\u4E49\u653E\u884C\u89C4\u5219\uFF08\u6BCF\u884C\u4E00\u6761\uFF0C# \u6CE8\u91CA\uFF09\uFF1A\u6574\u884C /\u6B63\u5219/flags \u547D\u4E2D\u300C\u6539\u5199\u7A3F\u300D\u5373\u653E\u884C\uFF1Bseg: \u524D\u7F00\u6539\u4E3A\u547D\u4E2D\u300C\u539F\u59CB\u7247\u6BB5\u300D\uFF08\u8BE5\u7247\u6BB5\u8DF3\u8FC7\u5168\u90E8\u5B88\u536B\uFF09\uFF1B\u5176\u5B83\u6309\u5B57\u9762\u6587\u5B57\u505A\u5B50\u4E32\u5339\u914D\u3002\u7528\u4E8E\u628A\u5B88\u536B\u8BEF\u6740\u7684\u8BFB\u6CD5\u653E\u884C"),
     blockPauseMs: z.number().min(0).max(3e3).default(d.blockPauseMs).description('\u6BB5\u843D\u4E4B\u95F4\u7684\u505C\u987F\u6BEB\u79D2\uFF08\u9ED8\u8BA4 350\uFF1B0 = \u5173\uFF09\u3002\u6807\u9898\u4E4B\u540E\u7528 1.6 \u500D\u2014\u2014\u89E3\u51B3"\u6362\u6BB5/\u6807\u9898\u5230\u6B63\u6587\u4E00\u53E3\u6C14\u5FF5\u5B8C"\u7684\u4E0D\u81EA\u7136'),
+    wholeSentenceMath: z.boolean().default(d.wholeSentenceMath).description("\u542B\u884C\u5185\u516C\u5F0F\u7684\u6574\u53E5\u4EA4\u7ED9\u6A21\u578B\u51FA\u7A3F\uFF08\u9ED8\u8BA4\u5F00\uFF09\uFF1A\u6574\u53E5\u4E00\u6B21\u6210\u578B\uFF0C\u6B63\u6587\u4E0E\u516C\u5F0F\u4E0D\u4F1A\u5404\u5FF5\u4E00\u904D\u3002\u5173\u6389\u5219\u9000\u56DE\u516C\u5F0F\u7247\u6BB5\u5355\u72EC\u6539\u5199\uFF0C\u957F\u53E5\u5BB9\u6613\u51FA\u73B0\u91CD\u590D\u6717\u8BFB\u3002\u4EC5 mathMode=model \u65F6\u751F\u6548"),
     mathMode: z.union([z.const("rules"), z.const("model"), z.const("verbatim")]).default(d.mathMode).description("\u6570\u5B66\u6717\u8BFB\u6A21\u5F0F\uFF1Arules \u786E\u5B9A\u6027\u89C4\u5219\uFF08\u9ED8\u8BA4\uFF0C\u96F6\u5BB9\u9519\uFF09/ model \u4EA4\u7ED9\u6539\u5199\u6A21\u578B / verbatim \u539F\u6837\u5FF5\u51FA")
   });
 }
@@ -15529,7 +15617,8 @@ function apply(ctx, config) {
     rewriter,
     pronunciation,
     contextChars: vset.rewriteContextChars,
-    blockPauseMs: vset.blockPauseMs
+    blockPauseMs: vset.blockPauseMs,
+    wholeSentenceMath: vset.wholeSentenceMath
   });
   const asr = createAsrRuntime({
     cacheDir: config.cacheDir,

@@ -157,7 +157,7 @@ await t('动态前文：短片段少给、大片段多给（同一段前文）',
     '其中 $v^2$ 的含义。\n\n',
     bigCode,
   ])
-  const small = calls.find((c) => c.before && c.before.length <= 140)
+  const small = calls.find((c) => c.before && c.before.length <= 220)
   const large = calls.reduce((a, b) => (b.before && (!a.before || b.before.length > a.before.length) ? b : a), {})
   assert.ok(small, '短片段应拿到较短前文：' + JSON.stringify(calls.map((c) => (c.before || '').length)))
   assert.ok(large.before.length > small.before.length, JSON.stringify(calls.map((c) => (c.before || '').length)))
@@ -172,6 +172,51 @@ await t('整句原文：行内公式带上所在整句（消歧用）', async ()
   const meta = calls[0].meta
   assert.ok(meta && typeof meta.sentence === 'string', JSON.stringify(meta))
   assert.ok(meta.sentence.includes('是一个映射'), meta.sentence)
+})
+
+await t('整句出稿：含公式的整句只发一次请求，正文不再单独念', async () => {
+  const calls = []
+  const fake = {
+    rewrite: async (req) => {
+      calls.push(req)
+      return { text: req.kind === 'sentence' ? '平均和最坏情况下是 n 的平方，最好是 n。' : '（不该走到这里）', cached: false }
+    },
+  }
+  const seen = await run({ enabled: true, mathMode: 'model', rewriter: fake }, ['平均/最坏 $O(n^2)$，最好 $O(n)$。\n'])
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].kind, 'sentence')
+  assert.equal(calls[0].text, '平均/最坏 $O(n^2)$，最好 $O(n)$。')
+  const text = seen.join('')
+  assert.ok(text.includes('n 的平方'), text)
+  assert.ok(!text.includes('$'), text)
+  assert.equal((text.match(/最好/g) || []).length, 1, text)
+})
+
+await t('整句切分：只有含公式的那一句走模型', async () => {
+  const calls = []
+  const fake = { rewrite: async (req) => { calls.push(req); return { text: '改写后的句子。', cached: false } } }
+  const seen = await run({ enabled: true, mathMode: 'model', rewriter: fake }, ['第一句没有公式。第二句有 $x^2$。\n'])
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].kind, 'sentence')
+  assert.ok(calls[0].text.includes('第二句'), calls[0].text)
+  const text = seen.join('')
+  assert.ok(text.includes('第一句没有公式。'), text)
+  assert.ok(text.includes('改写后的句子。'), text)
+})
+
+await t('关掉整句出稿：退回公式片段单独改写', async () => {
+  const kinds = []
+  const fake = { rewrite: async (req) => { kinds.push(req.kind); return { text: 'x 的平方', cached: false } } }
+  await run({ enabled: true, mathMode: 'model', rewriter: fake, wholeSentenceMath: false }, ['平均/最坏 $O(n^2)$，最好 $O(n)$。\n'])
+  assert.deepEqual(kinds, ['inline-math', 'inline-math'])
+})
+
+await t('整句出稿失败：回退逐片段（公式走确定性读法）', async () => {
+  const fake = { rewrite: async () => null }
+  const seen = await run({ enabled: true, mathMode: 'model', rewriter: fake }, ['平均/最坏 $O(n^2)$。\n'])
+  const text = seen.join('')
+  assert.ok(text.includes('大 O'), text)
+  assert.ok(text.includes('n 的平方'), text)
 })
 
 await t('段落/标题停顿：标题单独成句，停顿挂到下一句', async () => {

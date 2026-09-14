@@ -17,7 +17,13 @@
  *  - 超时、限流、可取消；相同片段 + 相同上下文可缓存复用；
  *  - 任何失败返回 null，由调用方回退到确定性读法。
  */
-export type RewriteKind = 'display-math' | 'inline-math' | 'code' | 'table'
+export type RewriteKind =
+  | 'display-math'
+  | 'inline-math'
+  /** 含行内公式的完整一句：整句交给模型出稿，正文不再单独念（根治重复朗读）。 */
+  | 'sentence'
+  | 'code'
+  | 'table'
 
 export interface RewriteSymbol {
   /** 符号本身，如 g、T。 */
@@ -166,6 +172,8 @@ const KIND_INSTRUCTIONS: Record<RewriteKind, string> = {
     '这是独立展示的数学公式。用一两句话说明它表达的关系（某个量等于什么、随什么变化）；只有在含义确实不明显时才简要提到关键符号，不要逐个罗列符号含义，也不要展开推导。',
   'inline-math':
     '这是句子中的行内公式。只把它念成通顺的中文短语（例如「二分之一 m v 平方」「v 等于 v 零加 a t」），不要展开解释，不要补充定义，不要加推导。',
+  sentence:
+    '这是含行内公式的完整一句正文。请输出**整句**的口播稿：句中的公式按读法规则念成中文，其余文字保持原意与顺序；不要概括、不要增删内容、不要重复任何部分。',
   code:
     '这是代码片段。用一两句话概括它的作用与关键步骤；不要逐行朗读，也不要念出整段代码；变量名与关键数字要保留。',
   table:
@@ -232,8 +240,10 @@ const SYSTEM_PROMPT = [
   'O(n log n) 读「大 O，n 乘 log n」（log 读英文单词，不要拆成字母），O(1) 读「大 O，常数」，',
   'O(n log k) 读「大 O，n 乘 log k」。Ω(...) 读「大 Omega，…」，Θ(...) 读「大 Theta，…」。',
   '20. 不要输出「左括号」「右括号」「左方括号」「右方括号」这类逐符号读法；括号里的内容直接连着念。',
-  '21. 行内公式只念公式本身：绝不要复述 segment.sentence（整句的其余部分已经在正文里念过了），',
-  '也不要带上公式前后的说明词（例如「平均/最坏」「最好」「如果」「当」）。只输出这个公式的读法。',
+  '21. 当 task 是「行内公式」时：只念公式本身，绝不要复述 segment.sentence（整句的其余部分',
+  '已经在正文里念过了），也不要带上公式前后的说明词（例如「平均/最坏」「最好」「如果」）。',
+  '22. 当 task 是「含行内公式的完整一句」时：输出整句的朗读稿——公式按上面的读法念成中文，',
+  '其余文字保持原意与顺序，不要概括、不要增删、不要重复任何部分。',
 ].join('\n')
 
 /** 抽取需要保安全的数字 token。 */
@@ -551,20 +561,23 @@ export class SpeechRewriter {
         const profile = GUARD_PROFILES[mode]
         if (looksLikePromptEcho(parsed.speech)) return null
         if (!withinLengthLimit(text, parsed.speech, profile.lengthFactor, profile.lengthBase)) return null
-        // 回显守卫：取「整句原文」与「前文」里更长的那个作为参照（两者都可能被模型照抄）。
-        const before = req.context && req.context.before ? req.context.before : ''
-        const sentence = req.meta && req.meta.sentence ? req.meta.sentence : ''
-        const echoRef = sentence.length > before.length ? sentence : before
-        if (echoRef.length >= 40 && parsed.speech.length >= 40 && contextEchoRatio(parsed.speech, echoRef) >= profile.echoRatio) {
-          return null
-        }
-        // 行内公式的复述守卫：模型会把整句原样吐回来（"平均/最坏 O(n 平方)，最好 O(n)。"），
-        // 导致朗读重复；短句同样要保护（旧实现被 echoRef.length >= 40 短路）。
-        if (profile.prefixEcho && req.kind === 'inline-math' && sentence) {
-          if (prefixEcho(parsed.speech, sentence, text)) return null
-        }
-        if (req.kind === 'inline-math' && sentence) {
-          if (sentenceEchoRatio(parsed.speech, sentence, text) >= profile.sentenceEchoRatio) return null
+        // kind='sentence' 是"整句出稿"：模型本来就该贴近整句，复述判定会全部误杀，故跳过。
+        if (req.kind !== 'sentence') {
+          // 回显守卫：取「整句原文」与「前文」里更长的那个作为参照（两者都可能被模型照抄）。
+          const before = req.context && req.context.before ? req.context.before : ''
+          const sentence = req.meta && req.meta.sentence ? req.meta.sentence : ''
+          const echoRef = sentence.length > before.length ? sentence : before
+          if (echoRef.length >= 40 && parsed.speech.length >= 40 && contextEchoRatio(parsed.speech, echoRef) >= profile.echoRatio) {
+            return null
+          }
+          // 行内公式的复述守卫：模型会把整句原样吐回来（"平均/最坏 O(n 平方)，最好 O(n)。"），
+          // 导致朗读重复；短句同样要保护（旧实现被 echoRef.length >= 40 短路）。
+          if (profile.prefixEcho && req.kind === 'inline-math' && sentence) {
+            if (prefixEcho(parsed.speech, sentence, text)) return null
+          }
+          if (req.kind === 'inline-math' && sentence) {
+            if (sentenceEchoRatio(parsed.speech, sentence, text) >= profile.sentenceEchoRatio) return null
+          }
         }
         if (!verifyNumbers(text, parsed.speech)) return null
       }

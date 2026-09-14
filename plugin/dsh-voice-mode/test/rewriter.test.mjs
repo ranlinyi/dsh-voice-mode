@@ -252,6 +252,15 @@ await t('自定义放行规则：命中改写稿 / seg 命中原始片段，都�
   assert.ok(await bySegment.rewrite({ kind: 'inline-math', text: 'O(n)', meta: { sentence } }), 'seg 放行规则应生效')
 })
 
+await t('kind=sentence：整句出稿不触发复述守卫（模型本就该贴近整句）', async () => {
+  const sentence = '平均/最坏 $O(n^2)$，最好 $O(n)$。'
+  const speech = '平均/最坏 O(n 平方)，最好 O(n)。'
+  const r = new SpeechRewriter({ baseUrl: 'https://x.test/v1', apiKey: '', model: 'm', fetchImpl: okFetch(J({ speech })) })
+  const res = await r.rewrite({ kind: 'sentence', text: sentence, meta: { sentence } })
+  assert.ok(res, '整句出稿不应被复述守卫拦下')
+  assert.equal(res.text, speech)
+})
+
 await t('端点不认 response_format（400）：去掉后重试一次', async () => {
   let calls = 0
   const f = async (_url, init) => {

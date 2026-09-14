@@ -178,6 +178,11 @@ export interface VoiceSettingsValue {
   guardAllowRules: string
   /** 段落之间的停顿毫秒（0 = 关；默认 350）；标题之后用 1.6 倍。 */
   blockPauseMs: number
+  /**
+   * 含行内公式的整句交给模型出稿（默认开）：正文与公式读法一次成型，避免重复朗读。
+   * 关掉则退回"公式片段单独改写 + 正文单独念"。
+   */
+  wholeSentenceMath: boolean
   /** 数学朗读模式：rules 确定性规则（默认）/ model 交给改写模型 / verbatim 原样。 */
   mathMode: 'rules' | 'model' | 'verbatim'
 }
@@ -217,6 +222,7 @@ const VOICE_SETTINGS_DEFAULTS: VoiceSettingsValue = {
   guardMode: 'standard',
   guardAllowRules: '',
   blockPauseMs: 350,
+  wholeSentenceMath: true,
   mathMode: 'rules',
 }
 
@@ -353,6 +359,10 @@ export function createVoiceSettingsSchema(defs?: Partial<VoiceSettingsValue>): z
       .max(3000)
       .default(d.blockPauseMs)
       .description('段落之间的停顿毫秒（默认 350；0 = 关）。标题之后用 1.6 倍——解决"换段/标题到正文一口气念完"的不自然'),
+    wholeSentenceMath: z
+      .boolean()
+      .default(d.wholeSentenceMath)
+      .description('含行内公式的整句交给模型出稿（默认开）：整句一次成型，正文与公式不会各念一遍。关掉则退回公式片段单独改写，长句容易出现重复朗读。仅 mathMode=model 时生效'),
     mathMode: z
       .union([z.const('rules'), z.const('model'), z.const('verbatim')])
       .default(d.mathMode)
@@ -581,6 +591,7 @@ export function apply(ctx: Context, config: Config): void {
     pronunciation,
     contextChars: vset.rewriteContextChars,
     blockPauseMs: vset.blockPauseMs,
+    wholeSentenceMath: vset.wholeSentenceMath,
   })
 
   // --- zipformer2 流式 ASR runtime（模型懒下载 + SHA256 校验，§8.3）。 ---

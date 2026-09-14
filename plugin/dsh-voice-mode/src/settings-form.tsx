@@ -83,6 +83,7 @@ const FIELD_LABELS: Record<string, string> = {
   guardMode: '改写守卫强度',
   guardAllowRules: '守卫放行规则',
   blockPauseMs: '段落停顿',
+  wholeSentenceMath: '整句公式出稿',
   rewriteSecret: '写入密钥',
 }
 const setHeader: React.CSSProperties = {
@@ -1264,6 +1265,9 @@ export function VoiceSettingsCard({ scope }: { scope: ScopeController }): React.
             </Row>
             <Row name="guardAllowRules" desc={tr('descGuardAllowRules')}>
               <TextAreaField score={scope} field="guardAllowRules" value={value.guardAllowRules ?? ''} placeholder="大 O；seg:/^O\(/；/^大 Omega/" rows={3} />
+            </Row>
+            <Row name="wholeSentenceMath" desc={tr('descWholeSentenceMath')}>
+              <input type="checkbox" checked={value.wholeSentenceMath !== false} onChange={(e) => void scope.set('wholeSentenceMath', e.target.checked)} />
             </Row>
             <Row name="blockPauseMs" desc={tr('descBlockPause')}>
               <NumberField score={scope} field="blockPauseMs" value={value.blockPauseMs ?? 350} min={0} max={3000} step={50} />

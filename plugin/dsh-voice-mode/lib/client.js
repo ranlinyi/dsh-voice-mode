@@ -1331,6 +1331,7 @@ var zh = {
   guardModeStandard: "\u6807\u51C6",
   guardModeStrict: "\u4E25\u683C",
   descGuardAllowRules: "\u5B88\u536B\u653E\u884C\u89C4\u5219\uFF08\u6BCF\u884C\u4E00\u6761\uFF0C# \u6CE8\u91CA\uFF09\uFF1A\u6574\u884C\u5199 /\u6B63\u5219/flags \u2192 \u547D\u4E2D\u300C\u6539\u5199\u7A3F\u300D\u5373\u653E\u884C\uFF1B\u52A0 seg: \u524D\u7F00 \u2192 \u547D\u4E2D\u300C\u539F\u59CB\u7247\u6BB5\u300D\uFF0C\u8BE5\u7247\u6BB5\u8DF3\u8FC7\u5168\u90E8\u5B88\u536B\uFF1B\u5176\u5B83\u5199\u6CD5\u6309\u5B57\u9762\u6587\u5B57\u505A\u5B50\u4E32\u5339\u914D\u3002\u7528\u4E8E\u628A\u5B88\u536B\u8BEF\u6740\u7684\u8BFB\u6CD5\u653E\u884C\uFF08\u653E\u884C\u540E\u76F4\u63A5\u91C7\u7528\u6A21\u578B\u8F93\u51FA\uFF0C\u4E0D\u518D\u505A\u957F\u5EA6/\u590D\u8FF0/\u6570\u5B57\u6821\u9A8C\uFF09\u3002",
+  descWholeSentenceMath: "\u542B\u884C\u5185\u516C\u5F0F\u7684\u6574\u53E5\u4EA4\u7ED9\u6A21\u578B\u51FA\u7A3F\uFF08\u9ED8\u8BA4\u5F00\uFF09\uFF1A\u6574\u53E5\u4E00\u6B21\u6210\u578B\uFF0C\u6B63\u6587\u548C\u516C\u5F0F\u4E0D\u4F1A\u5404\u5FF5\u4E00\u904D\uFF0C\u6839\u6CBB\u91CD\u590D\u6717\u8BFB\u3002\u5173\u6389\u5219\u9000\u56DE\u300C\u516C\u5F0F\u7247\u6BB5\u5355\u72EC\u6539\u5199 + \u6B63\u6587\u5355\u72EC\u5FF5\u300D\uFF0C\u957F\u53E5\u5BB9\u6613\u91CD\u590D\u3002\u4EC5 mathMode=model \u65F6\u751F\u6548\u3002",
   descBlockPause: "\u6BB5\u843D\u4E4B\u95F4\u7684\u505C\u987F\u6BEB\u79D2\uFF08\u9ED8\u8BA4 350\uFF1B0 = \u5173\u95ED\uFF09\u3002\u6807\u9898\u4E4B\u540E\u7528 1.6 \u500D\uFF1B\u89E3\u51B3\u300C\u6362\u6BB5\u3001\u6807\u9898\u5230\u6B63\u6587\u6CA1\u6709\u505C\u987F\u3001\u4E00\u53E3\u6C14\u5FF5\u5B8C\u300D\u7684\u4E0D\u81EA\u7136\u3002\u4EC5\u8BED\u97F3\u6539\u7F16\u7AD9\u5F00\u542F\u65F6\u751F\u6548\u3002",
   descMathMode: "\u6570\u5B66\u6717\u8BFB\u6A21\u5F0F\uFF1A\u786E\u5B9A\u6027\u89C4\u5219\u96F6\u5BB9\u9519\uFF08\u9ED8\u8BA4\uFF09/ \u4EA4\u7ED9\u6539\u5199\u6A21\u578B / \u539F\u6837\u5FF5\u51FA\u3002",
   mathModeRules: "\u786E\u5B9A\u6027\u89C4\u5219",
@@ -1497,6 +1498,7 @@ var en = {
   guardModeStandard: "Standard",
   guardModeStrict: "Strict",
   descGuardAllowRules: "Guard allow rules (one per line, # comment): a bare /regex/flags line matches the rewritten speech; a seg: prefix matches the original segment (that whole segment skips all guards); anything else is a literal substring match on the speech. Use it to allow readings the guards wrongly rejected (allowed output is used as-is, with no length/echo/number checks).",
+  descWholeSentenceMath: "Hand any sentence containing inline math to the model as a whole (default on): the sentence is produced once, so prose and formulas are never read twice \u2014 this is the structural fix for repeated reading. Turn off to fall back to per-formula rewriting plus separate prose. Only effective when mathMode=model.",
   descBlockPause: "Silence inserted between paragraphs in ms (default 350; 0 = off). Headings use 1.6x; fixes the unnatural feel of paragraphs and heading-to-body running on with no pause. Only applies while the speech adaptation station is on.",
   descMathMode: "Math reading mode: deterministic rules (default, zero-tolerance) / let the rewrite model handle it / read verbatim.",
   mathModeRules: "Deterministic rules",
@@ -1616,6 +1618,7 @@ var FIELD_LABELS = {
   guardMode: "\u6539\u5199\u5B88\u536B\u5F3A\u5EA6",
   guardAllowRules: "\u5B88\u536B\u653E\u884C\u89C4\u5219",
   blockPauseMs: "\u6BB5\u843D\u505C\u987F",
+  wholeSentenceMath: "\u6574\u53E5\u516C\u5F0F\u51FA\u7A3F",
   rewriteSecret: "\u5199\u5165\u5BC6\u94A5"
 };
 var setHeader = {
@@ -2667,6 +2670,7 @@ function VoiceSettingsCard({ scope }) {
           }
         ) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "guardAllowRules", desc: t("descGuardAllowRules"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextAreaField, { score: scope, field: "guardAllowRules", value: value.guardAllowRules ?? "", placeholder: "\u5927 O\uFF1Bseg:/^O\\(/\uFF1B/^\u5927 Omega/", rows: 3 }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "wholeSentenceMath", desc: t("descWholeSentenceMath"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "checkbox", checked: value.wholeSentenceMath !== false, onChange: (e) => void scope.set("wholeSentenceMath", e.target.checked) }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "blockPauseMs", desc: t("descBlockPause"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NumberField, { score: scope, field: "blockPauseMs", value: value.blockPauseMs ?? 350, min: 0, max: 3e3, step: 50 }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Section, { title: t("secModel"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "modelHost", desc: t("descModelHost"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SelectField, { score: scope, field: "modelHost", value: value.modelHost ?? "", options: HOST_OPTIONS, placeholder: "https://..." }) }) }),
@@ -2693,7 +2697,7 @@ var TELEMETRY_VIEW = [
   { stage: "first-tts-chunk", key: "telFirstChunk" },
   { stage: "first-audio-played", key: "telFirstPlayed" }
 ];
-var BUILD_TAG = "f166529";
+var BUILD_TAG = "1f7d762";
 var TELEMETRY_FLAG = "dsh-voice-mode-adaptation.telemetry";
 var telemetryEnabled = typeof localStorage !== "undefined" && localStorage.getItem(TELEMETRY_FLAG) === "1";
 console.log("[dsh-voice] build=" + BUILD_TAG);

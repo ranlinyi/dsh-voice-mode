@@ -34,6 +34,11 @@ export interface SpeechAdapterConfig {
   contextChars?: number
   /** 段落之间的停顿毫秒（0 = 关；未设 = 350）。标题之后用 1.6 倍。 */
   blockPauseMs?: number
+  /**
+   * 含行内公式的整句交给模型出稿（默认开）。
+   * 关掉则退回"公式片段单独改写 + 正文单独念"，容易重复朗读。
+   */
+  wholeSentenceMath?: boolean
 }
 
 export interface SpeechAdapterOptions {
@@ -97,6 +102,35 @@ function tableFallback(seg: SpeechSegment): string {
 /** 正文里的显式符号定义（如「g 表示重力加速度」）；匹配不到就不猜。 */
 const SYMBOL_DEF_RE = /([A-Za-z])\s*(?:表示|代表|意为|指的是)\s*([\u4e00-\u9fff]{2,10})/g
 
+/**
+ * 把同一个块内的片段按终止标点切成"句"（用于整句改写）。
+ * prose 片段可能含多句，按「。！？!?；;…换行」切；行内公式/行内代码等片段附着在当前句里。
+ */
+export function splitSegmentSentences(group: SpeechSegment[]): SpeechSegment[][] {
+  const out: SpeechSegment[][] = []
+  let cur: SpeechSegment[] = []
+  for (const seg of group) {
+    if (seg.kind !== 'prose') {
+      cur.push(seg)
+      continue
+    }
+    const text = seg.text
+    const re = /[。！？!?；;…\n]+/g
+    let start = 0
+    let m: RegExpExecArray | null
+    while ((m = re.exec(text)) !== null) {
+      const end = m.index + m[0].length
+      cur.push({ kind: 'prose', text: text.slice(start, end) })
+      out.push(cur)
+      cur = []
+      start = end
+    }
+    if (start < text.length) cur.push({ kind: 'prose', text: text.slice(start) })
+  }
+  if (cur.length) out.push(cur)
+  return out
+}
+
 export class SpeechAdapter {
   private readonly router = new BlockRouter()
   private readonly segmenter: SentenceSegmenter
@@ -120,13 +154,13 @@ export class SpeechAdapter {
       for (const s of this.segmenter.feed(delta)) this.opts.onSentence(s)
       return
     }
-    for (const seg of this.router.feed(delta)) this.schedule(seg)
+    this.consume(this.router.feed(delta))
   }
 
   /** 流结束：处理未闭合结构块，并冲刷残余句子。 */
   flush(): void {
     if (this.opts.config().enabled) {
-      for (const seg of this.router.flush()) this.schedule(seg)
+      this.consume(this.router.flush())
     }
     this.run(() => {
       for (const s of this.segmenter.flush()) this.opts.onSentence(s, this.takePause())
@@ -146,6 +180,69 @@ export class SpeechAdapter {
     const symbols = [...this.symbols.entries()].map(([sym, meaning]) => ({ sym, meaning })).slice(-12)
     if (symbols.length) ctx.symbols = symbols
     return ctx
+  }
+
+  /** 把一个块内的片段按 pause 分组，再按句处理。 */
+  private consume(segs: SpeechSegment[]): void {
+    let group: SpeechSegment[] = []
+    const flushGroup = (): void => {
+      if (group.length) {
+        this.handleGroup(group)
+        group = []
+      }
+    }
+    for (const seg of segs) {
+      if (seg.kind === 'pause') {
+        flushGroup()
+        this.schedule(seg)
+      } else {
+        group.push(seg)
+      }
+    }
+    flushGroup()
+  }
+
+  /**
+   * 一个块内的片段：含行内公式时按"整句"交给模型（正文不再单独念，根治重复朗读），
+   * 不含公式的句子仍走原来的片段路径（不产生额外请求）。
+   */
+  private handleGroup(group: SpeechSegment[]): void {
+    const cfg = this.opts.config()
+    const wholeSentence = cfg.wholeSentenceMath !== false && cfg.mathMode === 'model' && cfg.rewriter !== null
+    if (!wholeSentence || !group.some((s) => s.kind === 'inline-math')) {
+      for (const seg of group) this.schedule(seg)
+      return
+    }
+    for (const sent of splitSegmentSentences(group)) {
+      if (sent.some((s) => s.kind === 'inline-math')) this.scheduleSentence(sent)
+      else for (const seg of sent) this.schedule(seg)
+    }
+  }
+
+  /** 整句（含行内公式）交给改写器：模型返回整句口播稿，失败则回退逐片段原路径。 */
+  private scheduleSentence(sent: SpeechSegment[]): void {
+    this.run(async () => {
+      const cfg = this.opts.config()
+      const raw = sent.map((s) => (s.kind === 'inline-math' ? '$' + s.text + '$' : s.text)).join('')
+      const text = raw.replace(/\s+/g, ' ').trim()
+      if (!text) return
+      const r = cfg.rewriter
+        ? await cfg.rewriter.rewrite({
+            kind: 'sentence',
+            text,
+            meta: { sentence: text },
+            context: this.context(text.length),
+          })
+        : null
+      if (r) {
+        for (const s of sent) if (s.kind === 'prose') this.rememberProse(s.text)
+        if (r.symbols) this.learnSymbols(r.symbols)
+        this.emit(r.text)
+        return
+      }
+      // 回退：按片段走原路径（行内公式走确定性读法），handle 内部自己记前文。
+      for (const seg of sent) await this.handle(seg)
+    })
   }
 
   private schedule(seg: SpeechSegment): void {
