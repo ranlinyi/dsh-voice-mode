@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 双版本 typecheck（防回归 I-1）。
-# 对 0.1.1-rc.2 与 0.1.5-rc.1 两套 @deepseek-ai 类型各跑一遍 tsc，确保 voice-mode
+# 对 0.1.1-rc.2 与 0.1.5-rc.1 两套 @deepseek-ai 类型各跑一遍 tsc，确保 voice-mode-adaptation
 # 源码在旧版与新版的类型面上都能通过——防止未来改动误用某版本独有 API 而静默破坏兼容。
 #
 # 用法：bash scripts/typecheck-dual.sh [版本线...]

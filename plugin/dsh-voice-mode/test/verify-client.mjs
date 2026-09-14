@@ -72,7 +72,7 @@ t('lib/client.js 是 __ModuleLoader__ 闭包且注入全部三个槽位', () => 
     'conversation.input.dock',
     'shell.overlay',
     'settings.plugin.item',
-    'voice-mode',
+    'voice-mode-adaptation',
   ]) {
     assert.ok(src.includes(s), `client bundle missing ${s}`)
   }
@@ -93,7 +93,7 @@ t('lib/index.js 含 P1-5 延迟埋点链广播（latency 事件）', () => {
 })
 t('lib/client.js 含 P1-5 开发模式埋点链（完说→首音）', () => {
   const src = read('lib/client.js')
-  assert.ok(src.includes('dsh-voice-mode.telemetry'), 'client bundle missing telemetry flag')
+  assert.ok(src.includes('dsh-voice-mode-adaptation.telemetry'), 'client bundle missing telemetry flag')
   assert.ok(src.includes('first-audio-played'), 'client bundle missing first-audio-played stage')
 })
 t('lib/index.js 含 P1-1 分块帧协议（sentenceId/chunkId/final 转发）', () => {
@@ -174,7 +174,7 @@ t('lib 含 B2 宿主存活探活（owner tabId + 失联让出）', () => {
   assert.ok(h.includes('activeTabId'), 'host bundle missing activeTabId')
   assert.ok(h.includes('ownerYieldTimer'), 'host bundle missing owner yield timer')
   const c = read('lib/client.js')
-  assert.ok(c.includes('dshvm-tabId'), 'client bundle missing per-tab id storage key')
+  assert.ok(c.includes('dshvma-tabId'), 'client bundle missing per-tab id storage key')
 })
 t('lib/client.js 播放期人声帧不跳过轮询（return-跳过轮询回归守卫）', () => {
   const c = read('lib/client.js')
@@ -228,7 +228,7 @@ t('lib/client.js 含 A1 原生 AEC 生效验证', () => {
 })
 t('lib 含 I4 403 乒乓守卫 + I5 autoResume 记忆', () => {
   const c = read('lib/client.js')
-  assert.ok(c.includes('dshvm-last-voice'), 'client bundle missing last-voice memory')
+  assert.ok(c.includes('dshvma-last-voice'), 'client bundle missing last-voice memory')
   const h = read('lib/index.js')
   assert.ok(h.includes('autoResume'), 'host bundle missing autoResume setting')
 })

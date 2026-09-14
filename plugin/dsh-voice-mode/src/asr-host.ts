@@ -116,7 +116,7 @@ export interface AsrRuntime {
   warmup(): void
 }
 
-/** 模型状态返回（/voice-mode/models/status 载荷）。 */
+/** 模型状态返回（/voice-mode-adaptation/models/status 载荷）。 */
 export interface ModelFileStatus {
   name: string
   exists: boolean
@@ -391,7 +391,7 @@ export function createAsrRuntime(options: AsrRuntimeOptions): AsrRuntime {
         senseWorker = client
         return client
       } catch (e) {
-        console.warn('[dsh-voice-mode] SenseVoice worker init failed: ' + String(e))
+        console.warn('[dsh-voice-mode-adaptation] SenseVoice worker init failed: ' + String(e))
         return null
       }
     })().finally(() => {
@@ -416,7 +416,7 @@ export function createAsrRuntime(options: AsrRuntimeOptions): AsrRuntime {
       // fetch 侧 Promise.race(10s) 在 worker 异步回执下真正可触发（主线程不被 decode 占住）。
       return await worker.request('decode', buf)
     } catch (e) {
-      console.warn('[dsh-voice-mode] SenseVoice re-transcribe failed: ' + String(e))
+      console.warn('[dsh-voice-mode-adaptation] SenseVoice re-transcribe failed: ' + String(e))
       return null
     }
   }
@@ -585,7 +585,7 @@ export function createAsrRuntime(options: AsrRuntimeOptions): AsrRuntime {
       const ff = finalizing.get(sessionId)
       ff?.delete(epoch)
       if (ff && ff.size === 0) finalizing.delete(sessionId)
-      console.warn('[dsh-voice-mode] finalize failed: ' + String(e))
+      console.warn('[dsh-voice-mode-adaptation] finalize failed: ' + String(e))
       return ''
     })
     if (!inflightMap) {

@@ -33,7 +33,7 @@ if (!path) {
 }
 
 const fx = JSON.parse(readFileSync(path, 'utf8'))
-if (fx.schema !== 'dsh-voice-mode/fixture@1') {
+if (fx.schema !== 'dsh-voice-mode-adaptation/fixture@1') {
   console.error(`未知 schema：${fx.schema}`)
   process.exit(1)
 }
@@ -317,7 +317,7 @@ if (wantJson) {
   console.log(
     JSON.stringify(
       {
-        schema: 'dsh-voice-mode/fixture-analysis@2',
+        schema: 'dsh-voice-mode-adaptation/fixture-analysis@2',
         source: path,
         env,
         windows: { pureEcho: pureEcho.length, userWhilePlaying: userWhilePlaying.length, idle: idleFrames.length },

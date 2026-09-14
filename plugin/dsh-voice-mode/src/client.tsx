@@ -1,5 +1,5 @@
 /**
- * dsh-voice-mode client half：语音模式入口、采音引擎与状态条。
+ * dsh-voice-mode-adaptation client half：语音模式入口、采音引擎与状态条。
  *
  * 入口（Q12）：输入框工具排麦克风按钮（conversation.input.right）+ 全局
  * Ctrl+Shift+V；激活后输入框上方常驻状态条（conversation.input.dock）。
@@ -124,7 +124,7 @@ const TELEMETRY_VIEW: { stage: TelemetryStage; key: TKey }[] = [
 ]
 
 /**
- * 开发模式开关：localStorage['dsh-voice-mode.telemetry'] === '1' 时状态条实时显示
+ * 开发模式开关：localStorage['dsh-voice-mode-adaptation.telemetry'] === '1' 时状态条实时显示
  * 「说完→首音」链路各段耗时（P1-5 延迟验收的测量面）。关闭时零采集零展示
  * （host 'latency' 事件照常下行，客户端不理会）。
  */
@@ -134,7 +134,7 @@ declare const __BUILD_TAG__: string
 // 进入语音模式相关的调试信息统一带版本号，便于确认运行的是哪一版（构建时注入 git 哈希）。
 const BUILD_TAG = __BUILD_TAG__
 
-const TELEMETRY_FLAG = 'dsh-voice-mode.telemetry'
+const TELEMETRY_FLAG = 'dsh-voice-mode-adaptation.telemetry'
 const telemetryEnabled =
   typeof localStorage !== 'undefined' && localStorage.getItem(TELEMETRY_FLAG) === '1'
 
@@ -224,12 +224,12 @@ const ECHO_TAIL_MS = 400
 const WAVE_BARS = 14
 const SUBMIT_DELAY_MS = 600
 /** 插件 HTTP 命名空间（与 host 侧 BASE_PATH 常量一致，固定不可配置）。 */
-const BASE_PATH = '/voice-mode'
+const BASE_PATH = '/voice-mode-adaptation'
 
 /** B2：每 tab 稳定唯一 ID（sessionStorage 跨刷新保持、关 tab 清除；host 据此探活 owner）。 */
 function getTabId(): string {
   try {
-    const KEY = 'dshvm-tabId'
+    const KEY = 'dshvma-tabId'
     let id = sessionStorage.getItem(KEY)
     if (!id) {
       id =
@@ -272,15 +272,15 @@ function parseShortcut(s: string): { ctrl: boolean; shift: boolean; alt: boolean
 /** I5：上次语音会话记忆（localStorage 持久，autoResume 切回时自动恢复）。 */
 function getLastVoiceSession(): string | null {
   try {
-    return localStorage.getItem('dshvm-last-voice')
+    return localStorage.getItem('dshvma-last-voice')
   } catch {
     return null
   }
 }
 function setLastVoiceSession(id: string | null): void {
   try {
-    if (id) localStorage.setItem('dshvm-last-voice', id)
-    else localStorage.removeItem('dshvm-last-voice')
+    if (id) localStorage.setItem('dshvma-last-voice', id)
+    else localStorage.removeItem('dshvma-last-voice')
   } catch {
     // ignore（隐私模式等 localStorage 不可用）
   }
@@ -293,7 +293,7 @@ export function apply(ctx: any): void {
     ctx.slots.register(
       {
         name: 'conversation.input.right',
-        id: 'voice-mode',
+        id: 'voice-mode-adaptation',
         order: 80,
         inject: (): VoiceSlotActions => ({ bus }),
       },
@@ -305,7 +305,7 @@ export function apply(ctx: any): void {
     ctx.slots.register(
       {
         name: 'conversation.input.dock',
-        id: 'voice-mode-status',
+        id: 'voice-mode-adaptation-status',
         order: 10,
         inject: (): VoiceSlotActions => ({ bus }),
       },
@@ -317,7 +317,7 @@ export function apply(ctx: any): void {
     ctx.slots.register(
       {
         name: 'shell.overlay',
-        id: 'voice-mode-overlay',
+        id: 'voice-mode-adaptation-overlay',
         order: 100,
         inject: (): VoiceSlotActions => ({ bus }),
       },
@@ -331,12 +331,12 @@ export function apply(ctx: any): void {
       ctx.slots.register(
         {
           name: 'settings.plugin.item',
-          id: 'voice-mode',
-          key: 'voice-mode',
+          id: 'voice-mode-adaptation',
+          key: 'voice-mode-adaptation',
           order: 100,
           label: t('stateVoiceMode'),
         },
-        () => React.createElement(VoiceSettingsCard, { scope: ctx.settingsScope.bind({ namespace: 'voice-mode' }) }),
+        () => React.createElement(VoiceSettingsCard, { scope: ctx.settingsScope.bind({ namespace: 'voice-mode-adaptation' }) }),
       ),
     )
   }
@@ -1121,16 +1121,16 @@ function useVoiceCss(): void {
     styleInjected = true
     const el = document.createElement('style')
     el.textContent = `
-@keyframes dshvm-fadein { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
-@keyframes dshvm-eq { 0%, 100% { transform: scaleY(0.35) } 50% { transform: scaleY(1) } }
-@keyframes dshvm-spin { to { transform: rotate(360deg) } }
-.dshvm-bar { width: 3px; border-radius: 99px; transition: height 0.08s linear, opacity 0.08s linear }
+@keyframes dshvma-fadein { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
+@keyframes dshvma-eq { 0%, 100% { transform: scaleY(0.35) } 50% { transform: scaleY(1) } }
+@keyframes dshvma-spin { to { transform: rotate(360deg) } }
+.dshvma-bar { width: 3px; border-radius: 99px; transition: height 0.08s linear, opacity 0.08s linear }
 /* 麦克风按钮所在的宿主容器也禁选：手指偏大时长按可能命中按钮外侧的容器留白，
    浏览器就近选中「语音」标签文字。 */
 :has(> [data-dshvm="mic"]) { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none }
 /* 按住说话期间整页禁选（!important 压过宿主样式）：安卓/桌面在长按或按住微拖时
    会从按钮附近开始选区，出现蓝色高亮和选择手柄，导致「按住说话」不可用。 */
-html.dshvm-holding, html.dshvm-holding * {
+html.dshvma-holding, html.dshvma-holding * {
   -webkit-user-select: none !important;
   user-select: none !important;
   -webkit-touch-callout: none !important;
@@ -1169,7 +1169,7 @@ export function MicButton({
   /** M2：隐藏 tab 时已暂停收音（可见时恢复）；隐私——避免后台持续录音。 */
   const pausedForHiddenRef = useRef(false)
   /** 引导参数读 bus.ui.boot（bus 为单例，组件重挂载不丢；事件时读实时值）。 */
-  const bootNow = (): VoiceBootConfig => bus.ui.boot ?? { basePath: '/voice-mode', silenceMs: 1500, interruptLevel: 0, idleTimeoutMinutes: 10, autoSend: true, autoResume: false, mode: 'toggle', bargeInMode: 'auto', echoGateDb: 6, shortcut: 'Ctrl+Shift+V', wakeWord: '', toolBeep: false }
+  const bootNow = (): VoiceBootConfig => bus.ui.boot ?? { basePath: '/voice-mode-adaptation', silenceMs: 1500, interruptLevel: 0, idleTimeoutMinutes: 10, autoSend: true, autoResume: false, mode: 'toggle', bargeInMode: 'auto', echoGateDb: 6, shortcut: 'Ctrl+Shift+V', wakeWord: '', toolBeep: false }
 
   useVoiceCss()
 
@@ -1547,7 +1547,7 @@ export function MicButton({
       )
       bus.setUi({ mode: cfg.mode })
       engineRef.current = engine
-      // fixture 录制（ADR-0004，默认关闭；localStorage['dsh-voice-mode.record']=meta|full）
+      // fixture 录制（ADR-0004，默认关闭；localStorage['dsh-voice-mode-adaptation.record']=meta|full）
       fixtureRecorder.begin({
         build: BUILD_TAG,
         mode: cfg.mode,
@@ -1980,7 +1980,7 @@ export function MicButton({
   const lockSelection = (): void => {
     if (selectGuardRef.current) return
     const root = document.documentElement
-    root.classList.add('dshvm-holding')
+    root.classList.add('dshvma-holding')
     try {
       window.getSelection()?.removeAllRanges()
     } catch {
@@ -1995,7 +1995,7 @@ export function MicButton({
     window.addEventListener('pointerup', release, true)
     window.addEventListener('pointercancel', release, true)
     selectGuardRef.current = () => {
-      root.classList.remove('dshvm-holding')
+      root.classList.remove('dshvma-holding')
       document.removeEventListener('selectstart', stopSelect, true)
       document.removeEventListener('contextmenu', stopSelect, true)
       window.removeEventListener('pointerup', release, true)
@@ -2266,7 +2266,7 @@ export function VoiceStatusBar({ bus, sessionId }: StatusBarProps): React.ReactE
         color: '#3fb950',
         background: 'rgba(63, 185, 80, 0.08)',
         border: '1px solid rgba(63, 185, 80, 0.25)',
-        animation: 'dshvm-fadein 0.2s ease',
+        animation: 'dshvma-fadein 0.2s ease',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2274,7 +2274,7 @@ export function VoiceStatusBar({ bus, sessionId }: StatusBarProps): React.ReactE
           {bars.map((v, i) => (
             <span
               key={i}
-              className="dshvm-bar"
+              className="dshvma-bar"
               style={{
                 height: `${3 + v * 12}px`,
                 background: '#3fb950',
@@ -2405,7 +2405,7 @@ export function VoiceOverlay({ bus }: OverlayProps): React.ReactElement {
         boxShadow: '0 8px 28px rgba(0, 0, 0, 0.4)',
         color: '#e6e8eb',
         maxWidth: 480,
-        animation: 'dshvm-fadein 0.25s ease',
+        animation: 'dshvma-fadein 0.25s ease',
       }}
     >
       <span style={{ display: 'inline-flex', alignItems: 'flex-end', gap: 2, height: 12, flexShrink: 0 }}>
@@ -2418,7 +2418,7 @@ export function VoiceOverlay({ bus }: OverlayProps): React.ReactElement {
               borderRadius: 99,
               background: '#2ea043',
               transformOrigin: 'bottom',
-              animation: `dshvm-eq 0.85s ease-in-out ${i * 0.18}s infinite`,
+              animation: `dshvma-eq 0.85s ease-in-out ${i * 0.18}s infinite`,
             }}
           />
         ))}

@@ -1,5 +1,5 @@
 /**
- * voice-mode 设置卡片（Plugins → 插件配置 区，官方座位 settings.plugin.item，
+ * voice-mode-adaptation 设置卡片（Plugins → 插件配置 区，官方座位 settings.plugin.item，
  * 按 settings 命名空间 key 分发；owner 不注入任何 props，卡片完全自绘）。
  *
  * 视觉/交互完全对齐 dshmarket 官方设置卡的 `.set*` 样式参数（从
@@ -38,7 +38,7 @@ const t = {
 }
 
 /** 插件 HTTP 命名空间（与 host 侧 BASE_PATH 常量及其余 client 引用一致，固定不可配置）。 */
-const BASE_PATH = '/voice-mode'
+const BASE_PATH = '/voice-mode-adaptation'
 
 const cardStyle: React.CSSProperties = {
   border: `1px solid ${t.border}`,
@@ -63,10 +63,23 @@ const FIELD_LABELS: Record<string, string> = {
   autoSend: '自动发送',
   autoResume: '自动恢复',
   senseVoice: '定稿重译',
-  spokenFormat: '口语化提示词',
+  spokenFormat: '排版与公式提示词',
   silenceMs: '静音停顿',
   idleTimeoutMinutes: '空闲超时',
   modelHost: '模型镜像',
+  rewriteEnabled: '改编站总开关',
+  rewriteBaseUrl: '改写端点',
+  rewriteApiKeyRef: '密钥凭据引用',
+  rewriteModel: '改写模型',
+  mathMode: '数学朗读模式',
+  rewriteTimeoutMs: '改写超时',
+  rewriteMaxTokens: '改写 token 上限',
+  rewriteTemperature: '改写温度',
+  rewriteCache: '讲稿缓存',
+  rewriteDisableThinking: '关闭思考链',
+  rewriteContextChars: '上下文长度',
+  pronunciationFixes: '多音字替代表',
+  rewriteSecret: '写入密钥',
 }
 const setHeader: React.CSSProperties = {
   appearance: 'none',
@@ -119,14 +132,14 @@ const inputStyle: React.CSSProperties = {
   outline: 'none',
 }
 const focusVisibleCss = `
-[data-dshvm-settings="card"] input:focus-visible,
-[data-dshvm-settings="card"] select:focus-visible,
-[data-dshvm-settings="card"] button:focus-visible {
+[data-dshvma-settings="card"] input:focus-visible,
+[data-dshvma-settings="card"] select:focus-visible,
+[data-dshvma-settings="card"] button:focus-visible {
   outline: 2px solid var(--dsw-alias-brand-primary);
   outline-offset: 1px;
 }
 @media (prefers-reduced-motion: reduce) {
-  [data-dshvm-settings="card"], [data-dshvm-settings="card"] * { transition: none !important; }
+  [data-dshvma-settings="card"], [data-dshvma-settings="card"] * { transition: none !important; }
 }`
 
 /** 常用 Edge TTS 音色（ShortName 取自 msedge-tts getVoices 实测权威清单）。 */
@@ -288,6 +301,114 @@ function TextField({
         if (e.key === 'Enter') commit()
       }}
     />
+  )
+}
+
+/** 多行文本字段（多音字替代表用；提交时机与 TextField 一致：失焦提交）。 */
+function TextAreaField({
+  score,
+  field,
+  value,
+  placeholder,
+  rows = 3,
+}: {
+  score: ScopeController
+  field: string
+  value: unknown
+  placeholder?: string
+  rows?: number
+}): React.ReactElement {
+  const [draft, setDraft] = useState<string>(String(value ?? ''))
+  useEffect(() => {
+    setDraft((d) => (d === String(value ?? '') ? d : String(value ?? '')))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value])
+  const commit = (): void => {
+    void score.set(field, draft)
+  }
+  return (
+    <textarea
+      style={{ ...inputStyle, width: 260, minHeight: 62, resize: 'vertical', lineHeight: 1.5 }}
+      rows={rows}
+      value={draft}
+      placeholder={placeholder}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+    />
+  )
+}
+
+/**
+ * 改写密钥输入：GUI 输入 → 宿主写入 DSH 凭据库（settings 只存引用名，明文不落配置）。
+ * 保存成功后清空输入框；密钥值不回显。
+ */
+function RewriteKeyField({ score, refValue }: { score: ScopeController; refValue: string }): React.ReactElement {
+  const [secret, setSecret] = useState('')
+  const [status, setStatus] = useState('')
+  const [busy, setBusy] = useState(false)
+  const save = async (): Promise<void> => {
+    const ref = /^[A-Za-z_][A-Za-z0-9_]*$/.test(refValue.trim()) ? refValue.trim() : 'GLM_API_KEY'
+    const value = secret.trim()
+    if (!value) {
+      setStatus('请先输入密钥')
+      return
+    }
+    setBusy(true)
+    setStatus('保存中…')
+    try {
+      const res = await fetch(location.origin + BASE_PATH + '/rewrite-key', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ref, value }),
+      })
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string }
+      if (res.ok && data.ok) {
+        setSecret('')
+        if (refValue.trim() !== ref) void score.set('rewriteApiKeyRef', ref)
+        setStatus('已保存到 DSH 凭据库（' + ref + '）')
+      } else {
+        setStatus('保存失败：' + String(data.error ?? res.status))
+      }
+    } catch (e) {
+      setStatus('保存失败：' + String((e as Error)?.message ?? e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <input
+        type="password"
+        autoComplete="off"
+        style={inputStyle}
+        value={secret}
+        placeholder="粘贴 API 密钥"
+        onChange={(e) => setSecret(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') void save()
+        }}
+      />
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => void save()}
+        style={{
+          appearance: 'none',
+          border: '1px solid ' + t.border,
+          background: t.bgOpen,
+          color: t.label,
+          borderRadius: 8,
+          padding: '6px 12px',
+          font: 'inherit',
+          fontSize: 12,
+          cursor: busy ? 'default' : 'pointer',
+          opacity: busy ? 0.6 : 1,
+        }}
+      >
+        保存到凭据库
+      </button>
+      {status ? <span style={{ fontSize: 11, color: t.term }}>{status}</span> : null}
+    </div>
   )
 }
 
@@ -648,7 +769,7 @@ function SegGroup({
   )
 }
 
-/** 模型状态载荷（/voice-mode/models/status 返回）。 */
+/** 模型状态载荷（/voice-mode-adaptation/models/status 返回）。 */
 interface ModelsStatusPayload {
   asr: { repo: string; ready: boolean; files: Array<{ name: string; exists: boolean; size: number }>; failLatchMs: number }
   vad: { repo: string; ready: boolean; size: number; failLatchMs: number }
@@ -926,14 +1047,14 @@ export function VoiceSettingsCard({ scope }: { scope: ScopeController }): React.
 
   if (unavailable) {
     return (
-      <div data-dshvm-settings="card" style={{ color: t.term, fontSize: 12, padding: '14px 16px', ...cardStyle }}>
+      <div data-dshvma-settings="card" style={{ color: t.term, fontSize: 12, padding: '14px 16px', ...cardStyle }}>
         <span style={{ color: 'var(--dsw-alias-state-error-primary)' }}>{tr('configUnavailable')}</span>{tr('configUnavailableNote')}
       </div>
     )
   }
 
   return (
-    <div data-dshvm-settings="card" style={cardStyle}>
+    <div data-dshvma-settings="card" style={cardStyle}>
       <style>{focusVisibleCss}</style>
       <button type="button" aria-expanded={!collapsed} onClick={() => setCollapsed((c) => !c)} style={{ ...setHeader, background: collapsed ? 'transparent' : t.bgOpen }}>
         <span style={setHeadText}>
@@ -1070,6 +1191,56 @@ export function VoiceSettingsCard({ scope }: { scope: ScopeController }): React.
             </Row>
             <Row name="idleTimeoutMinutes" desc={tr('descIdle')}>
               <NumberField score={scope} field="idleTimeoutMinutes" value={value.idleTimeoutMinutes ?? 10} min={1} max={120} step={1} />
+            </Row>
+            </Section>
+            <Section title={tr('secAdaptation')}>
+            <Row name="rewriteEnabled" desc={tr('descRewriteEnabled')}>
+              <input type="checkbox" checked={Boolean(value.rewriteEnabled)} onChange={(e) => void scope.set('rewriteEnabled', e.target.checked)} />
+            </Row>
+            <Row name="rewriteBaseUrl" desc={tr('descRewriteBaseUrl')}>
+              <TextField score={scope} field="rewriteBaseUrl" value={value.rewriteBaseUrl ?? ''} placeholder="https://open.bigmodel.cn/api/paas/v4" />
+            </Row>
+            <Row name="rewriteApiKeyRef" desc={tr('descRewriteApiKeyRef')}>
+              <TextField score={scope} field="rewriteApiKeyRef" value={value.rewriteApiKeyRef ?? ''} placeholder="GLM_API_KEY" />
+            </Row>
+            <Row name="rewriteSecret" desc={tr('descRewriteSecret')}>
+              <RewriteKeyField score={scope} refValue={String(value.rewriteApiKeyRef ?? '')} />
+            </Row>
+            <Row name="rewriteModel" desc={tr('descRewriteModel')}>
+              <TextField score={scope} field="rewriteModel" value={value.rewriteModel ?? ''} placeholder="glm-4.5-air" />
+            </Row>
+            <Row name="mathMode" desc={tr('descMathMode')}>
+              <SegGroup
+                score={scope}
+                field="mathMode"
+                value={value.mathMode}
+                options={[
+                  { v: 'rules', label: tr('mathModeRules') },
+                  { v: 'model', label: tr('mathModeModel') },
+                  { v: 'verbatim', label: tr('mathModeVerbatim') },
+                ]}
+              />
+            </Row>
+            <Row name="rewriteTimeoutMs" desc={tr('descRewriteTimeout')}>
+              <NumberField score={scope} field="rewriteTimeoutMs" value={value.rewriteTimeoutMs ?? 8000} min={500} max={60000} step={500} />
+            </Row>
+            <Row name="rewriteMaxTokens" desc={tr('descRewriteMaxTokens')}>
+              <NumberField score={scope} field="rewriteMaxTokens" value={value.rewriteMaxTokens ?? 400} min={64} max={4000} step={64} />
+            </Row>
+            <Row name="rewriteTemperature" desc={tr('descRewriteTemperature')}>
+              <NumberField score={scope} field="rewriteTemperature" value={value.rewriteTemperature ?? 0} min={0} max={2} step={0.1} />
+            </Row>
+            <Row name="rewriteCache" desc={tr('descRewriteCache')}>
+              <input type="checkbox" checked={Boolean(value.rewriteCache)} onChange={(e) => void scope.set('rewriteCache', e.target.checked)} />
+            </Row>
+            <Row name="rewriteDisableThinking" desc={tr('descRewriteDisableThinking')}>
+              <input type="checkbox" checked={Boolean(value.rewriteDisableThinking)} onChange={(e) => void scope.set('rewriteDisableThinking', e.target.checked)} />
+            </Row>
+            <Row name="rewriteContextChars" desc={tr('descRewriteContextChars')}>
+              <NumberField score={scope} field="rewriteContextChars" value={value.rewriteContextChars ?? 800} min={0} max={4000} step={50} />
+            </Row>
+            <Row name="pronunciationFixes" desc={tr('descPronunciationFixes')}>
+              <TextAreaField score={scope} field="pronunciationFixes" value={value.pronunciationFixes ?? ''} placeholder="原词 => 同音替词（等字数）" rows={3} />
             </Row>
             </Section>
             <Section title={tr('secModel')}>

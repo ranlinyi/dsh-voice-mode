@@ -1,5 +1,5 @@
 /**
- * dsh-voice-mode ASR engine（浏览器半）：持续聆听 + VAD 自动分段。
+ * dsh-voice-mode-adaptation ASR engine（浏览器半）：持续聆听 + VAD 自动分段。
  *
  * 与参照 dsh-voice 的关键差异：
  *  - 不是 tap/hold，而是「进入语音模式后持续收音」：静音 1500ms 自动断句（P1-3，端点优先由 host Silero VAD 判定），
@@ -473,7 +473,7 @@ export function createAsrEngine(config: AsrConfig, sessionId: string): AsrEngine
           })
         } catch {
           restoreState()
-          if (attempt === MAX_FINAL_ATTEMPTS - 1) console.warn('[dsh-voice-mode] finalize fetch 异常（重试耗尽）')
+          if (attempt === MAX_FINAL_ATTEMPTS - 1) console.warn('[dsh-voice-mode-adaptation] finalize fetch 异常（重试耗尽）')
           continue
         }
         if (res.status === 202) {
@@ -496,7 +496,7 @@ export function createAsrEngine(config: AsrConfig, sessionId: string): AsrEngine
         }
         // 5s 重试后模型仍加载（202 持久）：外层继续重试（有界 3 次），而非 return 静默丢句。
         if (res.status === 202) {
-          if (attempt === MAX_FINAL_ATTEMPTS - 1) console.warn('[dsh-voice-mode] finalize 模型加载超时（重试耗尽）')
+          if (attempt === MAX_FINAL_ATTEMPTS - 1) console.warn('[dsh-voice-mode-adaptation] finalize 模型加载超时（重试耗尽）')
           continue
         }
         // 403 会话过期：host 端活跃会话已变更（如被抢占/让出），尝试恢复后重试一次。
@@ -519,7 +519,7 @@ export function createAsrEngine(config: AsrConfig, sessionId: string): AsrEngine
         // 段已被清（stop/新段）时世代变化，结果作废。
         restoreState()
         if (!res.ok) {
-          if (attempt === MAX_FINAL_ATTEMPTS - 1) console.warn('[dsh-voice-mode] finalize 5xx（重试耗尽）')
+          if (attempt === MAX_FINAL_ATTEMPTS - 1) console.warn('[dsh-voice-mode-adaptation] finalize 5xx（重试耗尽）')
           continue
         }
         // 容错：网关/宿主偶发 5xx 或响应非 JSON 时，不打断状态机也不误报——重试。
@@ -527,7 +527,7 @@ export function createAsrEngine(config: AsrConfig, sessionId: string): AsrEngine
         try {
           out = (await res.json()) as { text?: string }
         } catch {
-          if (attempt === MAX_FINAL_ATTEMPTS - 1) console.warn('[dsh-voice-mode] finalize 响应非 JSON（重试耗尽）')
+          if (attempt === MAX_FINAL_ATTEMPTS - 1) console.warn('[dsh-voice-mode-adaptation] finalize 响应非 JSON（重试耗尽）')
           continue
         }
         // 校验本段世代（快照+1）：仅当定稿期间又推进（新段/打断/stop）时作废；
@@ -777,7 +777,7 @@ const startRecorder = async (): Promise<void> => {
     // track.getSettings() 是唯一可见信号；false 时外放回声几乎必然漏进 → 自打断。
     const aecOn = stream.getAudioTracks()[0]?.getSettings().echoCancellation === true
     if (!aecOn) {
-      console.warn('[dsh-voice-mode] 浏览器原生 echoCancellation 未生效（外放可能自打断），建议用耳机或「手动打断」')
+      console.warn('[dsh-voice-mode-adaptation] 浏览器原生 echoCancellation 未生效（外放可能自打断），建议用耳机或「手动打断」')
     }
     config.onAecState?.(aecOn)
     const AC: typeof AudioContext =

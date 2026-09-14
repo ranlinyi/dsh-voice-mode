@@ -143,7 +143,7 @@ async function downloadVerified(opts: {
   const url = `${host}/${repo}/resolve/main/${spec.file}`
   const partSt = await stat(partPath).catch(() => null)
   const resumeFrom = partSt?.isFile() ? partSt.size : 0
-  const headers: Record<string, string> = { 'user-agent': 'dsh-voice-mode' }
+  const headers: Record<string, string> = { 'user-agent': 'dsh-voice-mode-adaptation' }
   if (resumeFrom > 0) headers.range = `bytes=${resumeFrom}-`
 
   const res = await fetch(url, { headers, redirect: 'follow' })
@@ -227,7 +227,7 @@ export async function ensureModelTree(opts: {
   let tree: string[] = []
   for (const host of hosts) {
     try {
-      const res = await fetch(host + '/api/models/' + repo + '?blobs=true', { headers: { 'user-agent': 'dsh-voice-mode' } })
+      const res = await fetch(host + '/api/models/' + repo + '?blobs=true', { headers: { 'user-agent': 'dsh-voice-mode-adaptation' } })
       if (res.ok) {
         const j = (await res.json()) as { siblings?: Array<{ rfilename?: string }> }
         tree = (j.siblings ?? []).map((s) => s.rfilename ?? '').filter((f) => f.startsWith(subdir + '/') && f.length > 0)
@@ -257,7 +257,7 @@ export async function ensureModelTree(opts: {
       for (const host of hosts) {
         try {
           const url = host + '/' + repo + '/resolve/main/' + encodeURIComponent(rel)
-          const res = await fetch(url, { headers: { 'user-agent': 'dsh-voice-mode' }, redirect: 'follow' })
+          const res = await fetch(url, { headers: { 'user-agent': 'dsh-voice-mode-adaptation' }, redirect: 'follow' })
           if (!redirectHostAllowed(res.url, allowCustomHost)) continue
           if (res.status !== 200) continue
           const sink = createWriteStream(partPath)

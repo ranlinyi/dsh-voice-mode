@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * dsh-voice-mode 模型预下载（prefetch）：安装后、首次使用前预热
+ * dsh-voice-mode-adaptation 模型预下载（prefetch）：安装后、首次使用前预热
  * ASR（zipformer2 ~160MB / VAD ~2MB / SenseVoice ~228MB）与本地 TTS
  * （vits-zh-ll ~130MB / kokoro int8 ~109MB）模型缓存，全部带 SHA256 校验
  * （与运行时 src/asr-host.ts / src/tts-local.ts 清单一致）。
@@ -69,8 +69,8 @@ const HOST_FALLBACK = 'https://hf-mirror.com'
 
 const defaultCacheDir = () =>
   process.platform === 'win32'
-    ? join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'dsh-voice-mode', 'models')
-    : join(homedir(), '.cache', 'dsh-voice-mode', 'models')
+    ? join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'dsh-voice-mode-adaptation', 'models')
+    : join(homedir(), '.cache', 'dsh-voice-mode-adaptation', 'models')
 
 const argCache = process.argv.indexOf('--cache-dir')
 const cacheDir = argCache !== -1 ? process.argv[argCache + 1] ?? defaultCacheDir() : defaultCacheDir()
@@ -102,7 +102,7 @@ async function downloadFile(repo, repoDir, file, expectedSha) {
   const partSt = await stat(partPath).catch(() => null)
   for (const host of [HOST_PRIMARY, HOST_FALLBACK]) {
     const url = `${host}/${repo}/resolve/main/${file}`
-    const headers = { 'user-agent': 'dsh-voice-mode/prefetch' }
+    const headers = { 'user-agent': 'dsh-voice-mode-adaptation/prefetch' }
     const resumeFrom = partSt?.size ?? 0
     if (resumeFrom > 0) headers.range = `bytes=${resumeFrom}-`
     try {
@@ -181,7 +181,7 @@ for (const kokoro of [
   const sentinelOk = await Promise.all(Object.entries(SENTINELS).map(async ([f, sha2]) => (await sha256OfFile(join(repoDir, f)).catch(() => '')) === sha2))
   if (!sentinelOk.every(Boolean)) {
     console.log(`Kokoro 模型（${repo}）：文件不全，走 HF 树枚举下载`)
-    const treeRes = await fetch(`${HOST_FALLBACK}/api/models/${repo}/tree/main?recursive=true`, { headers: { 'user-agent': 'dsh-voice-mode/prefetch' } })
+    const treeRes = await fetch(`${HOST_FALLBACK}/api/models/${repo}/tree/main?recursive=true`, { headers: { 'user-agent': 'dsh-voice-mode-adaptation/prefetch' } })
     if (treeRes.ok) {
       const tree = await treeRes.json()
       const files = (tree ?? []).map((x) => x.path).filter((p) => !p.endsWith('/') && !['.gitattributes', 'README.md', 'LICENSE'].includes(p))
@@ -198,7 +198,7 @@ for (const kokoro of [
           if (want && (await sha256OfFile(localPath).catch(() => '')) === want) { doneCount++; continue }
           try {
             await mkdir(localPath.replace(/[\\/][^\\/]*$/, ''), { recursive: true })
-            const res = await fetch(`${HOST_FALLBACK}/${repo}/resolve/main/${encodeURIComponent(rel)}`, { headers: { 'user-agent': 'dsh-voice-mode/prefetch' } })
+            const res = await fetch(`${HOST_FALLBACK}/${repo}/resolve/main/${encodeURIComponent(rel)}`, { headers: { 'user-agent': 'dsh-voice-mode-adaptation/prefetch' } })
             if (res.status !== 200) { console.error(`  ✗ ${rel} (status ${res.status})`); ok = false; continue }
             const sink = createWriteStream(partPath)
             const reader = res.body?.getReader()

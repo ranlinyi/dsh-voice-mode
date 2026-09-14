@@ -58,7 +58,7 @@ plugin.apply(fakeCtx, {
   idleTimeoutMinutes: 10,
 })
 
-const handler = routes.get('/voice-mode/preview')
+const handler = routes.get('/voice-mode-adaptation/preview')
 const statuses = []
 for (let i = 1; i <= 6; i++) {
   const res = {
@@ -87,7 +87,7 @@ for (let i = 1; i <= 6; i++) {
     socket: { remoteAddress: '127.0.0.1' },
     headers: { host: '127.0.0.1:3080', origin: 'http://127.0.0.1:3080' },
     method: 'POST',
-    url: '/voice-mode/preview',
+    url: '/voice-mode-adaptation/preview',
     on(ev, cb) {
       if (ev === 'data') queueMicrotask(() => cb(Buffer.from(JSON.stringify({ voice: i % 2 === 0 ? 'fushiyu' : 'gunian', rate: 1 }))))
       if (ev === 'end') queueMicrotask(() => cb())

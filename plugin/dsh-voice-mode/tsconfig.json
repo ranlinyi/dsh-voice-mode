@@ -22,7 +22,11 @@
     "src/index.ts",
     "src/asr-host.ts",
     "src/tts-queue.ts",
-    "src/segmenter.ts"
+    "src/segmenter.ts",
+    "src/block-router.ts",
+    "src/math.ts",
+    "src/rewriter.ts",
+    "src/speech-adapter.ts"
   ],
   "exclude": [
     "src/client.tsx",

@@ -7,7 +7,7 @@
  *
  * 测试集目录约定：*.wav（16k 单声道 16bit PCM）+ 同名 *.txt（参考文本，UTF-8）。
  * 模型自动懒下载至平台缓存目录（与插件同一约定：Linux/macOS
- * ~/.cache/dsh-voice-mode/models/，Windows %LOCALAPPDATA%\dsh-voice-mode\models），
+ * ~/.cache/dsh-voice-mode-adaptation/models/，Windows %LOCALAPPDATA%\dsh-voice-mode-adaptation\models），
  * .part 断点续传，huggingface.co ↗ hf-mirror.com 回退（--host 可指定镜像）。
  *
  * 输出：Markdown 表格（model | CER% | 平均段延迟 ms | 模型体积 MB），
@@ -85,8 +85,8 @@ function parseArgs(argv) {
 // ---------- 平台缓存目录 ----------
 function cacheDir() {
   return process.platform === 'win32'
-    ? join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'dsh-voice-mode', 'models')
-    : join(homedir(), '.cache', 'dsh-voice-mode', 'models')
+    ? join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'dsh-voice-mode-adaptation', 'models')
+    : join(homedir(), '.cache', 'dsh-voice-mode-adaptation', 'models')
 }
 
 // ---------- 懒下载（.part 续传 + host 回退，与插件 ensureFile 同构） ----------
@@ -110,7 +110,7 @@ async function ensureFile(repoDir, file, hosts) {
   for (const host of hosts) {
     try {
       const url = `${host}/${repoDir.split(/[\\/]/).pop()}/resolve/main/${file}`
-      const headers = { 'user-agent': 'dsh-voice-mode-bench' }
+      const headers = { 'user-agent': 'dsh-voice-mode-adaptation-bench' }
       if (partSize > 0) headers.range = `bytes=${partSize}-`
       const res = await fetch(url, { headers })
       if (res.status === 416) {

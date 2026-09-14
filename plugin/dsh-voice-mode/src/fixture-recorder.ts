@@ -6,9 +6,9 @@
  * docs/findings/2026-09-02-echo-gate-ratchet.md 里哪个分支成立。
  *
  * ── 开关（localStorage，改完刷新页面）──
- *   localStorage.setItem('dsh-voice-mode.record', 'meta')  // 只录逐帧统计（几十 KB）
- *   localStorage.setItem('dsh-voice-mode.record', 'full')  // 统计 + 音轨（可离线重放全链路）
- *   localStorage.removeItem('dsh-voice-mode.record')       // 关闭
+ *   localStorage.setItem('dsh-voice-mode-adaptation.record', 'meta')  // 只录逐帧统计（几十 KB）
+ *   localStorage.setItem('dsh-voice-mode-adaptation.record', 'full')  // 统计 + 音轨（可离线重放全链路）
+ *   localStorage.removeItem('dsh-voice-mode-adaptation.record')       // 关闭
  *
  * ── 用法 ──
  *   进入语音模式即自动开录，右上角出现红色 REC 徽标。
@@ -20,13 +20,13 @@
  * 自包含：不接入 React 状态、不改状态条组件。徽标是自己 append 的 DOM，
  * 删掉本文件 + 两处调用点即可完全移除。
  *
- * 产物：单个 .json（schema dsh-voice-mode/fixture@1），音轨为 base64 Int16。
+ * 产物：单个 .json（schema dsh-voice-mode-adaptation/fixture@1），音轨为 base64 Int16。
  */
 
 /** 录制档位。 */
 export type RecordMode = 'off' | 'meta' | 'full'
 
-const FLAG = 'dsh-voice-mode.record'
+const FLAG = 'dsh-voice-mode-adaptation.record'
 /** 上限：防长时间录制吃爆内存（到点自动停并落盘）。 */
 const MAX_SECONDS = 180
 const SAMPLE_RATE = 16000
@@ -269,7 +269,7 @@ class FixtureRecorder {
     this.unmountBadge()
     const durationMs = Date.now() - this.startedAt
     const payload: Record<string, unknown> = {
-      schema: 'dsh-voice-mode/fixture@1',
+      schema: 'dsh-voice-mode-adaptation/fixture@1',
       recordedAt: new Date(this.startedAt).toISOString(),
       reason,
       mode: this.mode,
@@ -289,7 +289,7 @@ class FixtureRecorder {
       }
       // res 缺省 = 与 mic 逐样本相同（原生 AEC 生效时自研 NLMS 被旁路）
     }
-    const name = `dshvm-fixture-${new Date(this.startedAt).toISOString().replace(/[:.]/g, '-')}-${reason}.json`
+    const name = `dshvma-fixture-${new Date(this.startedAt).toISOString().replace(/[:.]/g, '-')}-${reason}.json`
     try {
       const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)

@@ -2,7 +2,7 @@
 /**
  * client 冒烟（防回归 I-3 的客户端部分）：用 headless chromium 打开 dsh web，
  * 走完首次引导流程（关 Internal Testing Notice / workspace 配置 / 选 workspace），
- * 等待 voice-mode 麦克风按钮 [data-dshvm="mic"] 渲染，并断言 console 无 error。
+ * 等待 voice-mode-adaptation 麦克风按钮 [data-dshvm="mic"] 渲染，并断言 console 无 error。
  *
  * 用法：node scripts/smoke-client.mjs <dsh-url> [--allow-console-error=regex,...]
  *   dsh-url：boot 后含 token 的完整 URL（如 http://127.0.0.1:3120/?token=xxx）。

@@ -1,4 +1,4 @@
-// dsh-voice-mode build: esbuild-based, replicating the official tsdown.client.ts
+// dsh-voice-mode-adaptation build: esbuild-based, replicating the official tsdown.client.ts
 // artifact shape for the client half; the host half is a plain ESM bundle
 // with runtime deps (msedge-tts, sherpa-onnx) external.
 
@@ -7,7 +7,7 @@ import { mkdirSync, renameSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { join } from 'node:path'
 
-const PKG_ID = 'dsh-voice-mode'
+const PKG_ID = 'dsh-voice-mode-adaptation'
 
 // 构建版本号：git 短哈希（进入语音模式时打到控制台，供确认运行版本）。
 let BUILD_TAG = 'unknown'
@@ -127,4 +127,4 @@ await buildAtomically({
   logLevel: 'info',
 })
 
-console.log('[dsh-voice-mode] build done: lib/index.js (host) + lib/sense-worker.mjs + lib/tts-vits-worker.cjs + lib/client.js (browser)')
+console.log('[dsh-voice-mode-adaptation] build done: lib/index.js (host) + lib/sense-worker.mjs + lib/tts-vits-worker.cjs + lib/client.js (browser)')

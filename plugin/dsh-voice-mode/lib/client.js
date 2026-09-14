@@ -1,4 +1,4 @@
-window.__ModuleLoader__.load({ id: "dsh-voice-mode", factory: (require) => {
+window.__ModuleLoader__.load({ id: "dsh-voice-mode-adaptation", factory: (require) => {
 var module = { exports: {} }; var exports = module.exports;
 "use strict";
 var __create = Object.create;
@@ -73,7 +73,7 @@ function matchWakeWord(partial, wakeWord) {
 }
 
 // src/fixture-recorder.ts
-var FLAG = "dsh-voice-mode.record";
+var FLAG = "dsh-voice-mode-adaptation.record";
 var MAX_SECONDS = 180;
 var SAMPLE_RATE = 16e3;
 function recordMode() {
@@ -239,7 +239,7 @@ var FixtureRecorder = class {
     this.unmountBadge();
     const durationMs = Date.now() - this.startedAt;
     const payload = {
-      schema: "dsh-voice-mode/fixture@1",
+      schema: "dsh-voice-mode-adaptation/fixture@1",
       recordedAt: new Date(this.startedAt).toISOString(),
       reason,
       mode: this.mode,
@@ -258,7 +258,7 @@ var FixtureRecorder = class {
         ...this.resDiffers ? { res: this.resTrack.toBase64() } : {}
       };
     }
-    const name = `dshvm-fixture-${new Date(this.startedAt).toISOString().replace(/[:.]/g, "-")}-${reason}.json`;
+    const name = `dshvma-fixture-${new Date(this.startedAt).toISOString().replace(/[:.]/g, "-")}-${reason}.json`;
     try {
       const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -630,7 +630,7 @@ function createAsrEngine(config, sessionId) {
           });
         } catch {
           restoreState();
-          if (attempt === MAX_FINAL_ATTEMPTS - 1) console.warn("[dsh-voice-mode] finalize fetch \u5F02\u5E38\uFF08\u91CD\u8BD5\u8017\u5C3D\uFF09");
+          if (attempt === MAX_FINAL_ATTEMPTS - 1) console.warn("[dsh-voice-mode-adaptation] finalize fetch \u5F02\u5E38\uFF08\u91CD\u8BD5\u8017\u5C3D\uFF09");
           continue;
         }
         if (res.status === 202) {
@@ -653,7 +653,7 @@ function createAsrEngine(config, sessionId) {
           });
         }
         if (res.status === 202) {
-          if (attempt === MAX_FINAL_ATTEMPTS - 1) console.warn("[dsh-voice-mode] finalize \u6A21\u578B\u52A0\u8F7D\u8D85\u65F6\uFF08\u91CD\u8BD5\u8017\u5C3D\uFF09");
+          if (attempt === MAX_FINAL_ATTEMPTS - 1) console.warn("[dsh-voice-mode-adaptation] finalize \u6A21\u578B\u52A0\u8F7D\u8D85\u65F6\uFF08\u91CD\u8BD5\u8017\u5C3D\uFF09");
           continue;
         }
         if (res.status === 403 && config.onSessionExpired) {
@@ -672,14 +672,14 @@ function createAsrEngine(config, sessionId) {
         }
         restoreState();
         if (!res.ok) {
-          if (attempt === MAX_FINAL_ATTEMPTS - 1) console.warn("[dsh-voice-mode] finalize 5xx\uFF08\u91CD\u8BD5\u8017\u5C3D\uFF09");
+          if (attempt === MAX_FINAL_ATTEMPTS - 1) console.warn("[dsh-voice-mode-adaptation] finalize 5xx\uFF08\u91CD\u8BD5\u8017\u5C3D\uFF09");
           continue;
         }
         let out;
         try {
           out = await res.json();
         } catch {
-          if (attempt === MAX_FINAL_ATTEMPTS - 1) console.warn("[dsh-voice-mode] finalize \u54CD\u5E94\u975E JSON\uFF08\u91CD\u8BD5\u8017\u5C3D\uFF09");
+          if (attempt === MAX_FINAL_ATTEMPTS - 1) console.warn("[dsh-voice-mode-adaptation] finalize \u54CD\u5E94\u975E JSON\uFF08\u91CD\u8BD5\u8017\u5C3D\uFF09");
           continue;
         }
         if (segmentEpoch !== epochSnapshot + 1) return;
@@ -856,7 +856,7 @@ function createAsrEngine(config, sessionId) {
     }
     const aecOn = stream.getAudioTracks()[0]?.getSettings().echoCancellation === true;
     if (!aecOn) {
-      console.warn("[dsh-voice-mode] \u6D4F\u89C8\u5668\u539F\u751F echoCancellation \u672A\u751F\u6548\uFF08\u5916\u653E\u53EF\u80FD\u81EA\u6253\u65AD\uFF09\uFF0C\u5EFA\u8BAE\u7528\u8033\u673A\u6216\u300C\u624B\u52A8\u6253\u65AD\u300D");
+      console.warn("[dsh-voice-mode-adaptation] \u6D4F\u89C8\u5668\u539F\u751F echoCancellation \u672A\u751F\u6548\uFF08\u5916\u653E\u53EF\u80FD\u81EA\u6253\u65AD\uFF09\uFF0C\u5EFA\u8BAE\u7528\u8033\u673A\u6216\u300C\u624B\u52A8\u6253\u65AD\u300D");
     }
     config.onAecState?.(aecOn);
     const AC = window.AudioContext ?? window.webkitAudioContext;
@@ -1311,7 +1311,23 @@ var zh = {
   descModelHost: "ASR \u6A21\u578B\u4E0B\u8F7D\u6E90\uFF08\u5B98\u65B9\u6E90 / \u56FD\u5185\u955C\u50CF\uFF0C\u6216\u9009\u300C\u81EA\u5B9A\u4E49\u300D\u586B\u4EFB\u610F\u955C\u50CF\uFF09",
   descAutoSend: "\u9759\u97F3\u5230\u70B9\u81EA\u52A8\u53D1\u9001\uFF08\u8FDE\u7EED\u591A\u6BB5\u62FC\u6210\u4E00\u6761\uFF1B\u5173=\u53EA\u8FDB\u8349\u7A3F\uFF1B\u6309\u4F4F Ctrl / hold \u677E\u624B\u4ECD\u53D1\u9001\uFF09",
   descAutoResume: "\u5207\u6362\u56DE\u4E0A\u6B21\u8BED\u97F3\u4F1A\u8BDD\u65F6\u81EA\u52A8\u6062\u590D\u8BED\u97F3\u6A21\u5F0F\uFF08\u9ED8\u8BA4\u5173\uFF0C\u9700\u9EA6\u514B\u98CE\u6743\u9650\u5DF2\u6388\u4E88\uFF1B\u7701\u53BB\u6BCF\u6B21\u5207\u6362\u4F1A\u8BDD\u540E\u91CD\u65B0\u70B9\u9EA6\u514B\u98CE\uFF09",
-  descSpokenFormat: "\u8BED\u97F3\u4F1A\u8BDD\u6CE8\u5165\u53E3\u8BED\u5316\u63D0\u793A\u8BCD\uFF08\u56DE\u590D\u53E3\u8BED\u5316\u3001\u77ED\u53E5\u3001\u4E0D\u7528 Markdown \u6392\u7248\u7B26\u53F7\uFF0C\u6717\u8BFB\u66F4\u987A\u66F4\u5FEB\uFF1B\u9ED8\u8BA4\u5F00\uFF0C\u6539\u52A8\u5373\u65F6\u751F\u6548\uFF09",
+  descSpokenFormat: "\u8BED\u97F3\u4F1A\u8BDD\u6CE8\u5165\u6392\u7248\u4E0E\u516C\u5F0F\u63D0\u793A\u8BCD\uFF08\u4FDD\u7559\u5B8C\u6574 Markdown \u4E0E LaTeX \u6392\u7248\uFF0C\u5E76\u8981\u6C42\u5B57\u9762\u7F8E\u5143\u7B26\u53F7\u8F6C\u4E49\u4E3A \\$\uFF1B\u9ED8\u8BA4\u5173\uFF0C\u6539\u52A8\u5373\u65F6\u751F\u6548\uFF09",
+  descRewriteEnabled: "\u8BED\u97F3\u6539\u7F16\u7AD9\u603B\u5F00\u5173\uFF08\u9ED8\u8BA4\u5173\uFF09\uFF1A\u5F00\u542F\u540E\u516C\u5F0F/\u8868\u683C/\u4EE3\u7801\u5148\u6539\u5199\u6210\u53E3\u64AD\u7A3F\u518D\u6717\u8BFB\uFF1B\u6B63\u6587\u6717\u8BFB\u4E0D\u53D7\u5F71\u54CD\u3002\u5F00\u542F\u524D\u4E0D\u6539\u52A8\u4EFB\u4F55\u73B0\u6709\u884C\u4E3A\u3002",
+  descRewriteBaseUrl: "\u6539\u5199\u6A21\u578B OpenAI \u517C\u5BB9\u7AEF\u70B9\uFF08\u9ED8\u8BA4\u667A\u8C31 GLM\uFF09\u3002\u8BF7\u6C42\u4ECE\u5BBF\u4E3B\u53D1\u51FA\uFF0C\u5BC6\u94A5\u4E0D\u4E0A\u6D4F\u89C8\u5668\u3002",
+  descRewriteApiKeyRef: "\u6539\u5199\u6A21\u578B\u5BC6\u94A5\u7684\u51ED\u636E\u5F15\u7528\uFF1A\u586B\u73AF\u5883\u53D8\u91CF\u540D\uFF08\u5982 GLM_API_KEY\uFF09\u3002\u5BC6\u94A5\u4E0D\u5199\u5165\u914D\u7F6E\u6587\u4EF6\u660E\u6587\u3002",
+  descRewriteSecret: "\u5728\u4E0B\u65B9\u8F93\u5165\u6846\u7C98\u8D34 API \u5BC6\u94A5\u5E76\u70B9\u300C\u4FDD\u5B58\u5230\u51ED\u636E\u5E93\u300D\uFF1A\u5BBF\u4E3B\u5199\u5165 DSH \u51ED\u636E\u5B58\u50A8\uFF0C\u8BBE\u7F6E\u6587\u4EF6\u53EA\u4FDD\u7559\u4E0A\u9762\u7684\u5F15\u7528\u540D\uFF0C\u660E\u6587\u4E0D\u843D\u914D\u7F6E\u3002",
+  descRewriteModel: "\u6539\u5199\u6A21\u578B\u540D\uFF08\u9ED8\u8BA4 glm-4.5-air\uFF09\u3002",
+  descRewriteTimeout: "\u6539\u5199\u8BF7\u6C42\u8D85\u65F6\u6BEB\u79D2\uFF08\u9ED8\u8BA4 8000\uFF09\uFF1B\u8D85\u65F6\u81EA\u52A8\u56DE\u9000\u786E\u5B9A\u6027\u8BFB\u6CD5\u3002",
+  descRewriteMaxTokens: "\u6539\u5199\u8F93\u51FA token \u57FA\u7EBF\uFF08\u9ED8\u8BA4 400\uFF09\uFF1A\u63D2\u4EF6\u4F1A\u6309\u7247\u6BB5\u957F\u5EA6\u81EA\u52A8\u4E0A\u8C03\uFF08\u4E0A\u9650 2048\uFF09\uFF0C\u907F\u514D\u957F\u8868\u683C/\u591A\u7B26\u53F7\u65F6 JSON \u88AB\u622A\u65AD\u800C\u56DE\u9000\u3002",
+  descRewriteTemperature: "\u6539\u5199\u6E29\u5EA6\uFF08\u9ED8\u8BA4 0\uFF0C\u8D8A\u4F4E\u8D8A\u7A33\u5B9A\uFF09\u3002",
+  descRewriteCache: "\u76F8\u540C\u7247\u6BB5\u590D\u7528\u8BB2\u7A3F\uFF08\u9ED8\u8BA4\u5F00\uFF0C\u51CF\u5C11\u91CD\u590D\u8BF7\u6C42\uFF09\u3002",
+  descRewriteDisableThinking: "\u5173\u95ED\u6539\u5199\u6A21\u578B\u7684\u601D\u8003\u94FE\uFF08\u9ED8\u8BA4\u5F00\uFF09\uFF1AGLM-4.5 \u7B49\u601D\u8003\u578B\u6A21\u578B\u4E0D\u5173\u601D\u8003\u4F1A\u53EA\u8F93\u51FA\u63A8\u7406\u3001\u6B63\u6587\u4E3A\u7A7A\uFF0C\u8FEB\u4F7F\u6539\u5199\u56DE\u9000\uFF1B\u4EC5\u7AEF\u70B9\u652F\u6301 thinking \u53C2\u6570\u65F6\u6709\u6548\u3002",
+  descRewriteContextChars: "\u4F20\u7ED9\u6539\u5199\u6A21\u578B\u7684\u524D\u6587\u5B57\u7B26\u4E0A\u9650\uFF08\u9ED8\u8BA4 800\uFF09\uFF1A\u5B9E\u9645\u957F\u5EA6\u6309\u7247\u6BB5\u52A8\u6001\u4F38\u7F29\u2014\u2014\u77ED\u516C\u5F0F\u5C11\u7ED9\u524D\u6587\uFF0C\u5927\u4EE3\u7801\u5757/\u5927\u8868\u683C\u591A\u7ED9\uFF0C\u5E76\u603B\u662F\u4ECE\u6574\u53E5\u5F00\u59CB\u30020 = \u4E0D\u7ED9\u524D\u6587\uFF0C\u53EA\u4FDD\u7559\u5DF2\u786E\u8BA4\u7684\u7B26\u53F7\u8868\u3002",
+  descPronunciationFixes: "\u591A\u97F3\u5B57\u8BFB\u97F3\u66FF\u4EE3\u8868\uFF08\u9ED8\u8BA4\u7A7A = \u63D2\u4EF6\u4E0D\u6539\u4EFB\u4F55\u8BCD\u3001\u4E5F\u4E0D\u7EA0\u97F3\uFF09\uFF1A\u6BCF\u884C\u300C\u539F\u8BCD => \u540C\u97F3\u66FF\u8EAB\u300D\uFF0C\u66FF\u8EAB\u5FC5\u987B\u4E0E\u539F\u8BCD\u7B49\u5B57\u6570\uFF1B\u53EA\u7EA0\u6B63\u8BFB\u97F3\uFF0C\u4E0D\u5141\u8BB8\u589E\u5220\u5B57\u6216\u6539\u6210\u540C\u4E49\u8BCD\uFF0C\u683C\u5F0F/\u5B57\u6570\u4E0D\u7B26\u7684\u884C\u4F1A\u88AB\u5FFD\u7565\u5E76\u56DE\u62A5\u3002",
+  descMathMode: "\u6570\u5B66\u6717\u8BFB\u6A21\u5F0F\uFF1A\u786E\u5B9A\u6027\u89C4\u5219\u96F6\u5BB9\u9519\uFF08\u9ED8\u8BA4\uFF09/ \u4EA4\u7ED9\u6539\u5199\u6A21\u578B / \u539F\u6837\u5FF5\u51FA\u3002",
+  mathModeRules: "\u786E\u5B9A\u6027\u89C4\u5219",
+  mathModeModel: "\u4EA4\u7ED9\u6A21\u578B",
+  mathModeVerbatim: "\u539F\u6837\u5FF5\u51FA",
   descSenseVoice: "\u5B9A\u7A3F\u7528 SenseVoice \u91CD\u8BD1\uFF08\u5E26\u6807\u70B9 + \u6570\u5B57\u5F52\u4E00\u5316\u3001\u8BC6\u522B\u66F4\u51C6\uFF1B\u9ED8\u8BA4\u5F00\u3002\u5173\u95ED\u53EF\u7701 228MB \u6A21\u578B\uFF0C\u53EA\u8D70\u6D41\u5F0F\u8BC6\u522B\uFF09",
   descToolBeep: '\u5DE5\u5177\u8C03\u7528\u63D0\u793A\u97F3\uFF08\u9ED8\u8BA4\u5173\uFF09\uFF1AAI \u601D\u8003/\u8C03\u7528\u5DE5\u5177\u65F6"\u6EF4"\u4E00\u58F0\uFF1B\u5ACC\u5435\u5C31\u4FDD\u6301\u5173\u95ED',
   descMode: "\u4EA4\u4E92\u6A21\u5F0F\uFF08toggle \u6301\u7EED\u8046\u542C+\u9759\u97F3\u65AD\u53E5 / hold \u6309\u4F4F\u8BF4\u8BDD\uFF09",
@@ -1368,6 +1384,7 @@ var zh = {
   secInterrupt: "\u6253\u65AD\u4E0E\u9759\u97F3",
   secInteraction: "\u4EA4\u4E92\u4E0E\u8F93\u5165",
   secRecognition: "\u8BC6\u522B\u4E0E\u53E3\u8BED",
+  secAdaptation: "\u8BED\u97F3\u6539\u7F16\u7AD9",
   secModel: "\u6A21\u578B\u4E0E\u955C\u50CF",
   telTotal: "\u5408\u8BA1"
 };
@@ -1452,7 +1469,23 @@ var en = {
   descModelHost: "ASR model download source (official source / mirror, or any custom URL)",
   descAutoSend: "Auto-send once quiet (consecutive segments join into one message; off = draft only; Ctrl / hold still sends)",
   descAutoResume: "Auto-resume voice mode when switching back to the last voice session (default off, requires granted mic permission)",
-  descSpokenFormat: "Inject spoken-format prompt into voice replies (colloquial, short sentences, no Markdown; default on, live)",
+  descSpokenFormat: "Inject formatting & formula guidance into voice replies (keep full Markdown/LaTeX; escape literal dollar signs as \\$; default off, live)",
+  descRewriteEnabled: "Speech adaptation master switch (default off): rewrite formulas/tables/code into spoken scripts before reading; normal prose is unaffected.",
+  descRewriteBaseUrl: "OpenAI-compatible endpoint for the rewrite model (default Zhipu GLM). Requests are sent from the host; the key never reaches the browser.",
+  descRewriteApiKeyRef: "Credential reference for the rewrite key: an environment-variable name (e.g. GLM_API_KEY). The secret is never written to config.",
+  descRewriteSecret: "Paste the API key below and click Save: the host stores it in the DSH credential store; the settings file keeps only the reference name above.",
+  descRewriteModel: "Rewrite model name (default glm-4.5-air).",
+  descRewriteTimeout: "Rewrite request timeout in ms (default 8000); on timeout it falls back to deterministic reading.",
+  descRewriteMaxTokens: "Baseline output tokens for rewriting (default 400): raised automatically with segment size (cap 2048) so long tables/symbol lists do not truncate the JSON and force a fallback.",
+  descRewriteTemperature: "Rewrite temperature (default 0, lower is more stable).",
+  descRewriteCache: "Reuse the script for identical fragments (default on; fewer requests).",
+  descRewriteDisableThinking: "Disable the rewrite model thinking chain (default on): thinking models like GLM-4.5 otherwise emit only reasoning with empty content, forcing a fallback. Only effective when the endpoint supports the thinking parameter.",
+  descRewriteContextChars: "Upper bound of preceding prose sent to the rewrite model (default 800). The actual size scales dynamically with the segment: short formulas get little prose, large code blocks/tables get more, always starting at a sentence boundary. 0 = no prose, symbol table only.",
+  descPronunciationFixes: "Pronunciation substitution table (empty by default = the plugin never changes a word or pronunciation): one entry per line, term => same-length homophone. Only pronunciation is corrected; adding/removing characters or using a synonym is rejected and reported.",
+  descMathMode: "Math reading mode: deterministic rules (default, zero-tolerance) / let the rewrite model handle it / read verbatim.",
+  mathModeRules: "Deterministic rules",
+  mathModeModel: "Let the model",
+  mathModeVerbatim: "Verbatim",
   descSenseVoice: "Re-transcribe the finalized utterance with SenseVoice (punctuation + ITN, more accurate; default on \u2014 turn off to skip the 228 MB model and keep streaming only)",
   descToolBeep: "Tool-call beep (default off): beep when the agent is thinking/calling tools; keep off if it annoys you",
   descMode: "Interaction mode (toggle: continuous listen + auto-send / hold: press to talk)",
@@ -1505,6 +1538,7 @@ var en = {
   secInterrupt: "Interrupt & silence",
   secInteraction: "Interaction",
   secRecognition: "Recognition & speech",
+  secAdaptation: "Speech adaptation",
   secModel: "Model & mirror",
   telTotal: "total"
 };
@@ -1524,7 +1558,7 @@ var t2 = {
   term: "var(--dsw-alias-label-tertiary)",
   brand: "var(--dsw-alias-brand-primary)"
 };
-var BASE_PATH = "/voice-mode";
+var BASE_PATH = "/voice-mode-adaptation";
 var cardStyle = {
   border: `1px solid ${t2.border}`,
   background: t2.bg,
@@ -1546,10 +1580,23 @@ var FIELD_LABELS = {
   autoSend: "\u81EA\u52A8\u53D1\u9001",
   autoResume: "\u81EA\u52A8\u6062\u590D",
   senseVoice: "\u5B9A\u7A3F\u91CD\u8BD1",
-  spokenFormat: "\u53E3\u8BED\u5316\u63D0\u793A\u8BCD",
+  spokenFormat: "\u6392\u7248\u4E0E\u516C\u5F0F\u63D0\u793A\u8BCD",
   silenceMs: "\u9759\u97F3\u505C\u987F",
   idleTimeoutMinutes: "\u7A7A\u95F2\u8D85\u65F6",
-  modelHost: "\u6A21\u578B\u955C\u50CF"
+  modelHost: "\u6A21\u578B\u955C\u50CF",
+  rewriteEnabled: "\u6539\u7F16\u7AD9\u603B\u5F00\u5173",
+  rewriteBaseUrl: "\u6539\u5199\u7AEF\u70B9",
+  rewriteApiKeyRef: "\u5BC6\u94A5\u51ED\u636E\u5F15\u7528",
+  rewriteModel: "\u6539\u5199\u6A21\u578B",
+  mathMode: "\u6570\u5B66\u6717\u8BFB\u6A21\u5F0F",
+  rewriteTimeoutMs: "\u6539\u5199\u8D85\u65F6",
+  rewriteMaxTokens: "\u6539\u5199 token \u4E0A\u9650",
+  rewriteTemperature: "\u6539\u5199\u6E29\u5EA6",
+  rewriteCache: "\u8BB2\u7A3F\u7F13\u5B58",
+  rewriteDisableThinking: "\u5173\u95ED\u601D\u8003\u94FE",
+  rewriteContextChars: "\u4E0A\u4E0B\u6587\u957F\u5EA6",
+  pronunciationFixes: "\u591A\u97F3\u5B57\u66FF\u4EE3\u8868",
+  rewriteSecret: "\u5199\u5165\u5BC6\u94A5"
 };
 var setHeader = {
   appearance: "none",
@@ -1602,14 +1649,14 @@ var inputStyle = {
   outline: "none"
 };
 var focusVisibleCss = `
-[data-dshvm-settings="card"] input:focus-visible,
-[data-dshvm-settings="card"] select:focus-visible,
-[data-dshvm-settings="card"] button:focus-visible {
+[data-dshvma-settings="card"] input:focus-visible,
+[data-dshvma-settings="card"] select:focus-visible,
+[data-dshvma-settings="card"] button:focus-visible {
   outline: 2px solid var(--dsw-alias-brand-primary);
   outline-offset: 1px;
 }
 @media (prefers-reduced-motion: reduce) {
-  [data-dshvm-settings="card"], [data-dshvm-settings="card"] * { transition: none !important; }
+  [data-dshvma-settings="card"], [data-dshvma-settings="card"] * { transition: none !important; }
 }`;
 var VOICE_OPTIONS = [
   { v: "zh-CN-XiaoxiaoNeural", label: "\u6653\u6653 \xB7 \u5973 \xB7 \u7B80\u4F53\u4E2D\u6587" },
@@ -1838,6 +1885,104 @@ function TextField({
       }
     }
   );
+}
+function TextAreaField({
+  score,
+  field,
+  value,
+  placeholder,
+  rows = 3
+}) {
+  const [draft, setDraft] = (0, import_react.useState)(String(value ?? ""));
+  (0, import_react.useEffect)(() => {
+    setDraft((d) => d === String(value ?? "") ? d : String(value ?? ""));
+  }, [value]);
+  const commit = () => {
+    void score.set(field, draft);
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    "textarea",
+    {
+      style: { ...inputStyle, width: 260, minHeight: 62, resize: "vertical", lineHeight: 1.5 },
+      rows,
+      value: draft,
+      placeholder,
+      onChange: (e) => setDraft(e.target.value),
+      onBlur: commit
+    }
+  );
+}
+function RewriteKeyField({ score, refValue }) {
+  const [secret, setSecret] = (0, import_react.useState)("");
+  const [status, setStatus] = (0, import_react.useState)("");
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  const save = async () => {
+    const ref = /^[A-Za-z_][A-Za-z0-9_]*$/.test(refValue.trim()) ? refValue.trim() : "GLM_API_KEY";
+    const value = secret.trim();
+    if (!value) {
+      setStatus("\u8BF7\u5148\u8F93\u5165\u5BC6\u94A5");
+      return;
+    }
+    setBusy(true);
+    setStatus("\u4FDD\u5B58\u4E2D\u2026");
+    try {
+      const res = await fetch(location.origin + BASE_PATH + "/rewrite-key", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ref, value })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.ok) {
+        setSecret("");
+        if (refValue.trim() !== ref) void score.set("rewriteApiKeyRef", ref);
+        setStatus("\u5DF2\u4FDD\u5B58\u5230 DSH \u51ED\u636E\u5E93\uFF08" + ref + "\uFF09");
+      } else {
+        setStatus("\u4FDD\u5B58\u5931\u8D25\uFF1A" + String(data.error ?? res.status));
+      }
+    } catch (e) {
+      setStatus("\u4FDD\u5B58\u5931\u8D25\uFF1A" + String(e?.message ?? e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      "input",
+      {
+        type: "password",
+        autoComplete: "off",
+        style: inputStyle,
+        value: secret,
+        placeholder: "\u7C98\u8D34 API \u5BC6\u94A5",
+        onChange: (e) => setSecret(e.target.value),
+        onKeyDown: (e) => {
+          if (e.key === "Enter") void save();
+        }
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      "button",
+      {
+        type: "button",
+        disabled: busy,
+        onClick: () => void save(),
+        style: {
+          appearance: "none",
+          border: "1px solid " + t2.border,
+          background: t2.bgOpen,
+          color: t2.label,
+          borderRadius: 8,
+          padding: "6px 12px",
+          font: "inherit",
+          fontSize: 12,
+          cursor: busy ? "default" : "pointer",
+          opacity: busy ? 0.6 : 1
+        },
+        children: "\u4FDD\u5B58\u5230\u51ED\u636E\u5E93"
+      }
+    ),
+    status ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11, color: t2.term }, children: status }) : null
+  ] });
 }
 function SelectField({
   score,
@@ -2339,12 +2484,12 @@ function VoiceSettingsCard({ scope }) {
   }, [engine]);
   const voiceOptions = engine === "edge" ? edgeVoices ?? VOICE_OPTIONS : engine === "kokoro" ? VOICE_OPTIONS_KOKORO : VOICE_OPTIONS_LOCAL;
   if (unavailable) {
-    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { "data-dshvm-settings": "card", style: { color: t2.term, fontSize: 12, padding: "14px 16px", ...cardStyle }, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { "data-dshvma-settings": "card", style: { color: t2.term, fontSize: 12, padding: "14px 16px", ...cardStyle }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-error-primary)" }, children: t("configUnavailable") }),
       t("configUnavailableNote")
     ] });
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { "data-dshvm-settings": "card", style: cardStyle, children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { "data-dshvma-settings": "card", style: cardStyle, children: [
     /* @__PURE__ */ (0, import_jsx_runtime.jsx)("style", { children: focusVisibleCss }),
     /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", { type: "button", "aria-expanded": !collapsed, onClick: () => setCollapsed((c) => !c), style: { ...setHeader, background: collapsed ? "transparent" : t2.bgOpen }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: setHeadText, children: [
@@ -2460,6 +2605,33 @@ function VoiceSettingsCard({ scope }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "silenceMs", desc: t("descSilence"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NumberField, { score: scope, field: "silenceMs", value: value.silenceMs ?? 1500, min: 500, max: 3e4, step: 100 }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "idleTimeoutMinutes", desc: t("descIdle"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NumberField, { score: scope, field: "idleTimeoutMinutes", value: value.idleTimeoutMinutes ?? 10, min: 1, max: 120, step: 1 }) })
       ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Section, { title: t("secAdaptation"), children: [
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteEnabled", desc: t("descRewriteEnabled"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "checkbox", checked: Boolean(value.rewriteEnabled), onChange: (e) => void scope.set("rewriteEnabled", e.target.checked) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteBaseUrl", desc: t("descRewriteBaseUrl"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextField, { score: scope, field: "rewriteBaseUrl", value: value.rewriteBaseUrl ?? "", placeholder: "https://open.bigmodel.cn/api/paas/v4" }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteApiKeyRef", desc: t("descRewriteApiKeyRef"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextField, { score: scope, field: "rewriteApiKeyRef", value: value.rewriteApiKeyRef ?? "", placeholder: "GLM_API_KEY" }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteSecret", desc: t("descRewriteSecret"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RewriteKeyField, { score: scope, refValue: String(value.rewriteApiKeyRef ?? "") }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteModel", desc: t("descRewriteModel"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextField, { score: scope, field: "rewriteModel", value: value.rewriteModel ?? "", placeholder: "glm-4.5-air" }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "mathMode", desc: t("descMathMode"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+          SegGroup,
+          {
+            score: scope,
+            field: "mathMode",
+            value: value.mathMode,
+            options: [
+              { v: "rules", label: t("mathModeRules") },
+              { v: "model", label: t("mathModeModel") },
+              { v: "verbatim", label: t("mathModeVerbatim") }
+            ]
+          }
+        ) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteTimeoutMs", desc: t("descRewriteTimeout"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NumberField, { score: scope, field: "rewriteTimeoutMs", value: value.rewriteTimeoutMs ?? 8e3, min: 500, max: 6e4, step: 500 }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteMaxTokens", desc: t("descRewriteMaxTokens"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NumberField, { score: scope, field: "rewriteMaxTokens", value: value.rewriteMaxTokens ?? 400, min: 64, max: 4e3, step: 64 }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteTemperature", desc: t("descRewriteTemperature"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NumberField, { score: scope, field: "rewriteTemperature", value: value.rewriteTemperature ?? 0, min: 0, max: 2, step: 0.1 }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteCache", desc: t("descRewriteCache"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "checkbox", checked: Boolean(value.rewriteCache), onChange: (e) => void scope.set("rewriteCache", e.target.checked) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteDisableThinking", desc: t("descRewriteDisableThinking"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "checkbox", checked: Boolean(value.rewriteDisableThinking), onChange: (e) => void scope.set("rewriteDisableThinking", e.target.checked) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteContextChars", desc: t("descRewriteContextChars"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NumberField, { score: scope, field: "rewriteContextChars", value: value.rewriteContextChars ?? 800, min: 0, max: 4e3, step: 50 }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "pronunciationFixes", desc: t("descPronunciationFixes"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextAreaField, { score: scope, field: "pronunciationFixes", value: value.pronunciationFixes ?? "", placeholder: "\u539F\u8BCD => \u540C\u97F3\u66FF\u8BCD\uFF08\u7B49\u5B57\u6570\uFF09", rows: 3 }) })
+      ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Section, { title: t("secModel"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "modelHost", desc: t("descModelHost"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SelectField, { score: scope, field: "modelHost", value: value.modelHost ?? "", options: HOST_OPTIONS, placeholder: "https://..." }) }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: t2.term, lineHeight: "18px", padding: "4px 0 8px" }, children: t("settingsEffectiveNote") }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(ModelStatusView, {})
@@ -2484,8 +2656,8 @@ var TELEMETRY_VIEW = [
   { stage: "first-tts-chunk", key: "telFirstChunk" },
   { stage: "first-audio-played", key: "telFirstPlayed" }
 ];
-var BUILD_TAG = "a3ec2f7";
-var TELEMETRY_FLAG = "dsh-voice-mode.telemetry";
+var BUILD_TAG = "a2aadc8";
+var TELEMETRY_FLAG = "dsh-voice-mode-adaptation.telemetry";
 var telemetryEnabled = typeof localStorage !== "undefined" && localStorage.getItem(TELEMETRY_FLAG) === "1";
 console.log("[dsh-voice] build=" + BUILD_TAG);
 var debugLog = (event, fields = {}) => {
@@ -2517,10 +2689,10 @@ var SAMPLE_RATE_16K = 16e3;
 var ECHO_DELAY_MS = 0;
 var ECHO_TAIL_MS = 400;
 var WAVE_BARS = 14;
-var BASE_PATH2 = "/voice-mode";
+var BASE_PATH2 = "/voice-mode-adaptation";
 function getTabId() {
   try {
-    const KEY = "dshvm-tabId";
+    const KEY = "dshvma-tabId";
     let id = sessionStorage.getItem(KEY);
     if (!id) {
       id = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -2553,15 +2725,15 @@ function parseShortcut(s) {
 }
 function getLastVoiceSession() {
   try {
-    return localStorage.getItem("dshvm-last-voice");
+    return localStorage.getItem("dshvma-last-voice");
   } catch {
     return null;
   }
 }
 function setLastVoiceSession(id) {
   try {
-    if (id) localStorage.setItem("dshvm-last-voice", id);
-    else localStorage.removeItem("dshvm-last-voice");
+    if (id) localStorage.setItem("dshvma-last-voice", id);
+    else localStorage.removeItem("dshvma-last-voice");
   } catch {
   }
 }
@@ -2572,7 +2744,7 @@ function apply(ctx) {
     () => ctx.slots.register(
       {
         name: "conversation.input.right",
-        id: "voice-mode",
+        id: "voice-mode-adaptation",
         order: 80,
         inject: () => ({ bus })
       },
@@ -2584,7 +2756,7 @@ function apply(ctx) {
     () => ctx.slots.register(
       {
         name: "conversation.input.dock",
-        id: "voice-mode-status",
+        id: "voice-mode-adaptation-status",
         order: 10,
         inject: () => ({ bus })
       },
@@ -2596,7 +2768,7 @@ function apply(ctx) {
     () => ctx.slots.register(
       {
         name: "shell.overlay",
-        id: "voice-mode-overlay",
+        id: "voice-mode-adaptation-overlay",
         order: 100,
         inject: () => ({ bus })
       },
@@ -2609,12 +2781,12 @@ function apply(ctx) {
       () => ctx.slots.register(
         {
           name: "settings.plugin.item",
-          id: "voice-mode",
-          key: "voice-mode",
+          id: "voice-mode-adaptation",
+          key: "voice-mode-adaptation",
           order: 100,
           label: t("stateVoiceMode")
         },
-        () => React.createElement(VoiceSettingsCard, { scope: ctx.settingsScope.bind({ namespace: "voice-mode" }) })
+        () => React.createElement(VoiceSettingsCard, { scope: ctx.settingsScope.bind({ namespace: "voice-mode-adaptation" }) })
       )
     );
   }
@@ -3209,16 +3381,16 @@ function useVoiceCss() {
     styleInjected = true;
     const el = document.createElement("style");
     el.textContent = `
-@keyframes dshvm-fadein { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
-@keyframes dshvm-eq { 0%, 100% { transform: scaleY(0.35) } 50% { transform: scaleY(1) } }
-@keyframes dshvm-spin { to { transform: rotate(360deg) } }
-.dshvm-bar { width: 3px; border-radius: 99px; transition: height 0.08s linear, opacity 0.08s linear }
+@keyframes dshvma-fadein { from { opacity: 0; transform: translateY(4px) } to { opacity: 1; transform: none } }
+@keyframes dshvma-eq { 0%, 100% { transform: scaleY(0.35) } 50% { transform: scaleY(1) } }
+@keyframes dshvma-spin { to { transform: rotate(360deg) } }
+.dshvma-bar { width: 3px; border-radius: 99px; transition: height 0.08s linear, opacity 0.08s linear }
 /* \u9EA6\u514B\u98CE\u6309\u94AE\u6240\u5728\u7684\u5BBF\u4E3B\u5BB9\u5668\u4E5F\u7981\u9009\uFF1A\u624B\u6307\u504F\u5927\u65F6\u957F\u6309\u53EF\u80FD\u547D\u4E2D\u6309\u94AE\u5916\u4FA7\u7684\u5BB9\u5668\u7559\u767D\uFF0C
    \u6D4F\u89C8\u5668\u5C31\u8FD1\u9009\u4E2D\u300C\u8BED\u97F3\u300D\u6807\u7B7E\u6587\u5B57\u3002 */
 :has(> [data-dshvm="mic"]) { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none }
 /* \u6309\u4F4F\u8BF4\u8BDD\u671F\u95F4\u6574\u9875\u7981\u9009\uFF08!important \u538B\u8FC7\u5BBF\u4E3B\u6837\u5F0F\uFF09\uFF1A\u5B89\u5353/\u684C\u9762\u5728\u957F\u6309\u6216\u6309\u4F4F\u5FAE\u62D6\u65F6
    \u4F1A\u4ECE\u6309\u94AE\u9644\u8FD1\u5F00\u59CB\u9009\u533A\uFF0C\u51FA\u73B0\u84DD\u8272\u9AD8\u4EAE\u548C\u9009\u62E9\u624B\u67C4\uFF0C\u5BFC\u81F4\u300C\u6309\u4F4F\u8BF4\u8BDD\u300D\u4E0D\u53EF\u7528\u3002 */
-html.dshvm-holding, html.dshvm-holding * {
+html.dshvma-holding, html.dshvma-holding * {
   -webkit-user-select: none !important;
   user-select: none !important;
   -webkit-touch-callout: none !important;
@@ -3248,7 +3420,7 @@ function MicButton({
   const manualHoldRef = (0, import_react2.useRef)(false);
   const breakRef = (0, import_react2.useRef)(null);
   const pausedForHiddenRef = (0, import_react2.useRef)(false);
-  const bootNow = () => bus.ui.boot ?? { basePath: "/voice-mode", silenceMs: 1500, interruptLevel: 0, idleTimeoutMinutes: 10, autoSend: true, autoResume: false, mode: "toggle", bargeInMode: "auto", echoGateDb: 6, shortcut: "Ctrl+Shift+V", wakeWord: "", toolBeep: false };
+  const bootNow = () => bus.ui.boot ?? { basePath: "/voice-mode-adaptation", silenceMs: 1500, interruptLevel: 0, idleTimeoutMinutes: 10, autoSend: true, autoResume: false, mode: "toggle", bargeInMode: "auto", echoGateDb: 6, shortcut: "Ctrl+Shift+V", wakeWord: "", toolBeep: false };
   useVoiceCss();
   const [, bumpUi] = (0, import_react2.useState)(0);
   (0, import_react2.useEffect)(
@@ -3875,7 +4047,7 @@ function MicButton({
   const lockSelection = () => {
     if (selectGuardRef.current) return;
     const root = document.documentElement;
-    root.classList.add("dshvm-holding");
+    root.classList.add("dshvma-holding");
     try {
       window.getSelection()?.removeAllRanges();
     } catch {
@@ -3887,7 +4059,7 @@ function MicButton({
     window.addEventListener("pointerup", release, true);
     window.addEventListener("pointercancel", release, true);
     selectGuardRef.current = () => {
-      root.classList.remove("dshvm-holding");
+      root.classList.remove("dshvma-holding");
       document.removeEventListener("selectstart", stopSelect, true);
       document.removeEventListener("contextmenu", stopSelect, true);
       window.removeEventListener("pointerup", release, true);
@@ -4095,14 +4267,14 @@ function VoiceStatusBar({ bus, sessionId }) {
         color: "#3fb950",
         background: "rgba(63, 185, 80, 0.08)",
         border: "1px solid rgba(63, 185, 80, 0.25)",
-        animation: "dshvm-fadein 0.2s ease"
+        animation: "dshvma-fadein 0.2s ease"
       },
       children: [
         /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { style: { display: "inline-flex", alignItems: "flex-end", gap: 2, height: 14, flexShrink: 0 }, children: bars.map((v, i) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
             "span",
             {
-              className: "dshvm-bar",
+              className: "dshvma-bar",
               style: {
                 height: `${3 + v * 12}px`,
                 background: "#3fb950",
@@ -4215,7 +4387,7 @@ function VoiceOverlay({ bus }) {
         boxShadow: "0 8px 28px rgba(0, 0, 0, 0.4)",
         color: "#e6e8eb",
         maxWidth: 480,
-        animation: "dshvm-fadein 0.25s ease"
+        animation: "dshvma-fadein 0.25s ease"
       },
       children: [
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { style: { display: "inline-flex", alignItems: "flex-end", gap: 2, height: 12, flexShrink: 0 }, children: [0, 1, 2].map((i) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
@@ -4227,7 +4399,7 @@ function VoiceOverlay({ bus }) {
               borderRadius: 99,
               background: "#2ea043",
               transformOrigin: "bottom",
-              animation: `dshvm-eq 0.85s ease-in-out ${i * 0.18}s infinite`
+              animation: `dshvma-eq 0.85s ease-in-out ${i * 0.18}s infinite`
             }
           },
           i

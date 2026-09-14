@@ -274,7 +274,7 @@ if (wantJson) {
   console.log(
     JSON.stringify(
       {
-        schema: 'dsh-voice-mode/echo-gate-bench@1',
+        schema: 'dsh-voice-mode-adaptation/echo-gate-bench@1',
         frameMs: FRAME_MS,
         crestSweep: sweep,
         gateDbSweep: gateSweep,

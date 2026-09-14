@@ -21,7 +21,7 @@ await build({
   platform: 'node',
   logLevel: 'silent',
 })
-const { SentenceSegmenter, plainText, splitSentences, sanitizeForTts } = await import(pathToFileURL(out).href)
+const { SentenceSegmenter, plainText, splitSentences, sanitizeForTts, applyPronunciationFixes, parsePronunciationFixes } = await import(pathToFileURL(out).href)
 
 let passed = 0
 const t = (name, fn) => {
@@ -56,6 +56,53 @@ t('流式截断的配对符经分句器后不再残留', () => {
   const out = s.feed('加粗**的内容。')
   assert.deepEqual(out, ['这是加粗的内容。'])
   assert.equal(s.flush().join('').includes('*'), false)
+})
+
+console.log('多音字替代表（内置为空 + 等字数硬校验）')
+t('内置为空：默认不改任何词（最速降线原样保留）', () => {
+  assert.equal(applyPronunciationFixes('最速降线问题'), '最速降线问题')
+  const s = new SentenceSegmenter()
+  assert.deepEqual(s.feed('这就是最速降线。'), ['这就是最速降线。'])
+})
+t('解析替代表：忽略注释/空行，接受 => / -> / →', () => {
+  const { fixes, errors } = parsePronunciationFixes('# 注释\n\n最速降线 => 最速酱线\nabc -> abd\nx → y\n')
+  assert.equal(errors.length, 0)
+  assert.deepEqual(fixes, [
+    { term: '最速降线', spoken: '最速酱线' },
+    { term: 'abc', spoken: 'abd' },
+    { term: 'x', spoken: 'y' },
+  ])
+})
+t('拒绝增音节改名：最速降线 => 最速下降线 被忽略并报错', () => {
+  const { fixes, errors } = parsePronunciationFixes('最速降线 => 最速下降线')
+  assert.deepEqual(fixes, [])
+  assert.equal(errors.length, 1)
+  assert.ok(errors[0].includes('字数不等'), errors[0])
+})
+t('缺分隔符/字段为空的行走 errors，不生效', () => {
+  const { fixes, errors } = parsePronunciationFixes('没有箭头的一行\n词 => ')
+  assert.deepEqual(fixes, [])
+  assert.equal(errors.length, 2)
+})
+t('同词同替身（term === spoken）直接跳过，不算错', () => {
+  const { fixes, errors } = parsePronunciationFixes('最速降线 => 最速降线')
+  assert.deepEqual(fixes, [])
+  assert.equal(errors.length, 0)
+})
+t('分句器按注入的替代表替换朗读文本', () => {
+  const s = new SentenceSegmenter({ fixes: () => [{ term: '最速降线', spoken: '最速酱线' }] })
+  assert.deepEqual(s.feed('这就是最速降线。'), ['这就是最速酱线。'])
+})
+t('替代表是实时 getter：改回空表即不再替换', () => {
+  let fixes = [{ term: '最速降线', spoken: '最速酱线' }]
+  const s = new SentenceSegmenter({ fixes: () => fixes })
+  assert.deepEqual(s.feed('最速降线。'), ['最速酱线。'])
+  fixes = []
+  assert.deepEqual(s.feed('最速降线。'), ['最速降线。'])
+})
+t('getter 抛错时退化为不替换，不打断朗读', () => {
+  const s = new SentenceSegmenter({ fixes: () => { throw new Error('boom') } })
+  assert.deepEqual(s.feed('最速降线。'), ['最速降线。'])
 })
 
 console.log('splitSentences')

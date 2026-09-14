@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# runtime 冒烟（防回归 I-3）：在隔离 DSH_HOME 上 boot 指定 dsh 核心 + voice-mode，
-# 验证 host 端点（/voice-mode、/voice-mode/config、/voice-mode/models/status），
+# runtime 冒烟（防回归 I-3）：在隔离 DSH_HOME 上 boot 指定 dsh 核心 + voice-mode-adaptation，
+# 验证 host 端点（/voice-mode-adaptation、/voice-mode-adaptation/config、/voice-mode-adaptation/models/status），
 # 并在 playwright-core 可用时用 headless chromium 验证客户端 mic 按钮 + console 0 error。
 #
 # 用法：bash scripts/smoke-runtime.sh <dsh-core-bin.js> [port]
@@ -35,8 +35,8 @@ cat > "$DSH_HOME/profiles/web/package.json" <<EOF
 {
   "name": "dsh-profile-web",
   "private": true,
-  "dependencies": { "dsh-voice-mode": "link:$LINK_SRC" },
-  "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "dsh-voice-mode"] } }
+  "dependencies": { "dsh-voice-mode-adaptation": "link:$LINK_SRC" },
+  "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "dsh-voice-mode-adaptation"] } }
 }
 EOF
 echo '[]' > "$DSH_HOME/profiles/web/cordis.patch.yml"
@@ -81,8 +81,8 @@ EOF
 }
 # 装完立即校验链接真的建起来了——pnpm 对无法解析的 link 会静默跳过（退出码仍为 0），
 # 不校验的话要到 boot 阶段才以 "cannot resolve profile bundle" 暴露，排障成本高。
-if [ ! -e "$DSH_HOME/profiles/web/node_modules/dsh-voice-mode/package.json" ]; then
-  echo "✗ dsh-voice-mode 未链接进隔离 profile（link:$LINK_SRC 解析失败）"
+if [ ! -e "$DSH_HOME/profiles/web/node_modules/dsh-voice-mode-adaptation/package.json" ]; then
+  echo "✗ dsh-voice-mode-adaptation 未链接进隔离 profile（link:$LINK_SRC 解析失败）"
   tail -20 "$WORK/pnpm.log"; exit 1
 fi
 
@@ -118,9 +118,9 @@ check() {  # name, url, expect_substr
 }
 
 BASE="http://127.0.0.1:$PORT"
-check "/voice-mode"           "$BASE/voice-mode"            '"ok":true'
-check "/voice-mode/config"    "$BASE/voice-mode/config"     'ttsEngine'
-check "/voice-mode/models/status" "$BASE/voice-mode/models/status" 'asr'
+check "/voice-mode-adaptation"           "$BASE/voice-mode-adaptation"            '"ok":true'
+check "/voice-mode-adaptation/config"    "$BASE/voice-mode-adaptation/config"     'ttsEngine'
+check "/voice-mode-adaptation/models/status" "$BASE/voice-mode-adaptation/models/status" 'asr'
 
 # 客户端冒烟（mic 按钮 + console 0 error）：需要 playwright-core + chromium
 if node -e "require.resolve('playwright-core')" >/dev/null 2>&1; then

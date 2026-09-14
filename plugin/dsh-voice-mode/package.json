@@ -1,5 +1,5 @@
 {
-  "name": "dsh-voice-mode",
+  "name": "dsh-voice-mode-adaptation",
   "description": "Full-duplex voice plugin for DeepSeek Harness: local zipformer2 streaming ASR (no API key) → editable draft; Edge TTS or local VITS / Kokoro read-aloud with live captions; true barge-in; hardened HTTP surface + model SHA256 pinning; compatible with all dsh releases since 0.1.1-rc.2 (verified 0.1.1 → 0.1.5-rc.2). · DSH 语音双工插件：流式识别入草稿、按句朗读+实时字幕、开口即打断；免 API Key、安全加固、全版本兼容（0.1.1-rc.2 起，含 0.1.5-rc.2 端到端验证）。",
   "version": "0.7.7",
   "type": "module",
@@ -42,7 +42,7 @@
   "scripts": {
     "build": "node build.mjs",
     "prepack": "node build.mjs",
-    "test": "node test/segmenter.test.mjs && node test/aec.test.mjs && node test/download.test.mjs && node test/endpoint.test.mjs && node test/resample.test.mjs && node test/sense-worker.test.mjs && node test/detect-route.test.mjs && node test/verify-client.mjs",
+    "test": "node test/segmenter.test.mjs && node test/block-router.test.mjs && node test/math.test.mjs && node test/rewriter.test.mjs && node test/speech-adapter.test.mjs && node test/aec.test.mjs && node test/download.test.mjs && node test/endpoint.test.mjs && node test/resample.test.mjs && node test/sense-worker.test.mjs && node test/detect-route.test.mjs && node test/verify-client.mjs",
     "verify:client": "node test/verify-client.mjs",
     "prefetch": "node scripts/prefetch.mjs",
     "list-voices": "node scripts/list-voices.mjs",
@@ -77,9 +77,14 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.1",
+    "mdast-util-to-string": "^4.0.0",
     "msedge-tts": "^2.0.7",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
+    "remark-parse": "^11.0.0",
     "sherpa-onnx": "^1.13.6",
-    "sherpa-onnx-node": "1.13.6"
+    "sherpa-onnx-node": "1.13.6",
+    "unified": "^11.0.5"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

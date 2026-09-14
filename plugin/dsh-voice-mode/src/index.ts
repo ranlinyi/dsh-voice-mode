@@ -1,14 +1,14 @@
 /**
- * dsh-voice-mode host half.
+ * dsh-voice-mode-adaptation host half.
  *
  * 一期架构：
  *  - 全局单活指针 activeVoiceSession：同一时刻仅一个会话处于语音模式；
  *    仅该会话的 llm/stream 被 tap（text-delta 过滤 -> 分句 -> TTS -> SSE），
  *    普通会话 next() 直达（模式隔离，验收点 7）。
- *  - HTTP 面：/voice-mode/toggle（进入/退出）、/asr（PCM -> 流式 zipformer2
+ *  - HTTP 面：/voice-mode-adaptation/toggle（进入/退出）、/asr（PCM -> 流式 zipformer2
  *    文本）、/cancel（TTS epoch++ + 可选会话回合取消）、/stream（SSE 音频帧 +
  *    模式状态广播）、/config（client 引导参数）。
- *  - 模型：懒下载 + .part 断点续传至 cacheDir（默认 ~/.cache/dsh-voice-mode/models/）。
+ *  - 模型：懒下载 + .part 断点续传至 cacheDir（默认 ~/.cache/dsh-voice-mode-adaptation/models/）。
  */
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
@@ -26,19 +26,21 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { rm } from 'node:fs/promises'
 import { createAsrRuntime, handleAsrRequest } from './asr-host.ts'
-import { SentenceSegmenter } from './segmenter.ts'
+import { SpeechAdapter, type SpeechAdapterConfig } from './speech-adapter.ts'
+import { SpeechRewriter } from './rewriter.ts'
+import { parsePronunciationFixes, type PronunciationFix } from './segmenter.ts'
 import { EdgeTtsEngine, TtsQueue, listEdgeVoices, type TtsEngine } from './tts-queue.ts'
 import { createSherpaVitsEngine, createSherpaKokoroEngine, TTS_MODEL_REPO, kokoroModelDir, type KokoroModel } from './tts-local.ts'
 import { HOST_PRIMARY, validateModelHost } from './models.ts'
 import { isLoopbackRequest, sameOriginRequest, RateLimiter } from './security.ts'
 
-export const name = 'voice-mode'
+export const name = 'voice-mode-adaptation'
 
 /**
- * 命名空间品牌常量（与官方 settingsNamespace('voice-mode') 等价：其运行时仅做
+ * 命名空间品牌常量（与官方 settingsNamespace('voice-mode-adaptation') 等价：其运行时仅做
  * kebab-case 校验（/^[a-z][a-z0-9-]*$/）后原样返回；此处本地断言避免对宿主包运行时 import）。
  */
-const NS_VOICE_MODE = 'voice-mode' as SettingsNamespace
+const NS_VOICE_MODE = 'voice-mode-adaptation' as SettingsNamespace
 
 /** P2-4 显式回合状态（host 为准，SSE 'turn' 广播；barge-in = 状态迁移 + 三层清理）。 */
 type TurnState = 'idle' | 'listening' | 'finalizing' | 'agent-speaking'
@@ -46,9 +48,9 @@ type TurnState = 'idle' | 'listening' | 'finalizing' | 'agent-speaking'
 /**
  * 插件 HTTP 命名空间（固定路径）。client bundle 以静态产物分发，无法感知
  * 宿主侧配置；若 basePath 可配置而客户端硬编码，一旦修改即分叉。故按
- * 客户端契约固定为 /voice-mode（不提供覆盖键；custom basePath 无增益）。
+ * 客户端契约固定为 /voice-mode-adaptation（不提供覆盖键；custom basePath 无增益）。
  */
-const BASE_PATH = '/voice-mode'
+const BASE_PATH = '/voice-mode-adaptation'
 
 /**
  * JSON 响应助手：必须用 writeHead 显式写头。
@@ -63,20 +65,18 @@ const respondJson = (res: ServerResponse, status: number, payload: unknown): voi
 }
 
 /**
- * 语音模式口语化提示词：设置项 spokenFormat（默认关）开启后，作为 system prompt
- * 末尾 section 注入（仅活跃语音会话，见 apply 内 'system-prompt/assemble' 瀑布）。
- * 让模型从源头用自然口语作答、不写 Markdown 排版符号——与 segmenter.plainText
- * 的剥离互补：剥离只管朗读文本，提示词让模型不输出书面结构，TTS 逐句听感更顺、
- * 字幕更自然。
+ * 排版与公式提示词：设置项 spokenFormat 开启后，作为 system prompt 末尾 section 注入
+ * （仅活跃语音会话，见 apply 内 'system-prompt/assemble' 瀑布）。
+ * 与旧版"口语化、去 Markdown"相反：本提示词要求保持完整 Markdown 与 LaTeX 排版，
+ * 屏幕阅读优先，仅额外约束字面美元符号必须转义（避免被渲染成行内公式）。
  */
 const VOICE_SPOKEN_PROMPT =
-  '【语音模式】当前回复会被语音朗读，请始终用用户所用语言、以口语化的短句直接回答，像面对面聊天一样自然，避免书面语和长难句。' +
-  '不要使用任何 Markdown 或排版符号（星号、下划线、反引号、井号、列表与表格标记、代码块等）。' +
-  '需要分点说明时用「第一、第二」或连贯的短句表达；除非用户明确要求，不要输出代码片段、完整 URL 或冗长定义，用一两句话概括含义即可。' +
-  '回答简洁直接，不要重复和寒暄。'
+  '【排版与公式】请使用与用户相同的语言、以正常严谨的书面风格作答。屏幕阅读优先：请充分使用 Markdown 结构（标题、列表、表格、引用、行内代码与代码块）与 LaTeX 公式（行内 $...$、展示 $$...$$），不要为了朗读而简化排版。' +
+  '字面美元符号必须转义：当 $ 表示货币金额、环境变量、Shell 变量等字面字符时，写成 \\$（反斜杠加美元符号）；同一行内出现两个未转义的 $ 会被渲染成行内公式、导致内容错乱；真正的数学公式仍用 $ 定界，不要转义。' +
+  '朗读侧会自行处理排版符号与公式，无需为朗读改变写作方式。'
 
 /** 提示词 section 的稳定名称（注册层按 order 排序；瀑布里 push 即追加到组装结果末尾）。 */
-const VOICE_SPOKEN_SECTION = 'voice-mode:spoken-format'
+const VOICE_SPOKEN_SECTION = 'voice-mode-adaptation:spoken-format'
 
 /**
  * dsh-agent 的 assembleContextFor 在 assemble 上下文里运行时注入 agent
@@ -93,8 +93,8 @@ export const inject = ['webServer', 'settings', 'sessions']
  */
 const defaultModelCacheDir = (): string =>
   process.platform === 'win32'
-    ? join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'dsh-voice-mode', 'models')
-    : join(homedir(), '.cache', 'dsh-voice-mode', 'models')
+    ? join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'dsh-voice-mode-adaptation', 'models')
+    : join(homedir(), '.cache', 'dsh-voice-mode-adaptation', 'models')
 
 /**
  * Q15 设置命名空间：全部运行时旋钮（音色/语速/打断/静音/超时/镜像/自动发送/模式/口语化提示词）。
@@ -143,6 +143,34 @@ export interface VoiceSettingsValue {
   wakeWord: string
   /** 工具调用提示音（默认关）：开启后 AI 调用工具时"滴"一声。 */
   toolBeep: boolean
+  /** 语音改编站总开关（默认关）：开启后公式/表格/代码改写成口播稿再朗读，正文不受影响。 */
+  rewriteEnabled: boolean
+  /** 改写模型 OpenAI 兼容端点（默认智谱 GLM）。 */
+  rewriteBaseUrl: string
+  /** 改写模型密钥的凭据引用（环境变量名；密钥不落配置明文）。 */
+  rewriteApiKeyRef: string
+  /** 改写模型名（默认 glm-4.5-air）。 */
+  rewriteModel: string
+  /** 改写请求超时（毫秒，超时回退确定性读法）。 */
+  rewriteTimeoutMs: number
+  /** 改写输出 token 上限。 */
+  rewriteMaxTokens: number
+  /** 改写温度（越低越稳定，默认 0）。 */
+  rewriteTemperature: number
+  /** 相同片段复用讲稿（默认开）。 */
+  rewriteCache: boolean
+  /** 关闭改写模型的思考链（默认开）：GLM-4.5 等思考型模型不关思考会只输出推理、正文为空。 */
+  rewriteDisableThinking: boolean
+  /** 传给改写模型的前文字符**上限**（0 = 不给前文；默认 800）。实际长度按片段动态伸缩。 */
+  rewriteContextChars: number
+  /**
+   * 多音字读音替代表：每行「原词 => 同音替身」，# 起首为注释。
+   * 默认空：插件不改任何词、也不纠音。替身必须与原词**等字数**，
+   * 只允许同音替换（历史实现「最速降线 => 最速下降线」增了音节、等于改了术语，已移除）。
+   */
+  pronunciationFixes: string
+  /** 数学朗读模式：rules 确定性规则（默认）/ model 交给改写模型 / verbatim 原样。 */
+  mathMode: 'rules' | 'model' | 'verbatim'
 }
 
 /** 平台常量默认（最底层；config base 与用户设置逐层覆盖）。 */
@@ -161,10 +189,22 @@ const VOICE_SETTINGS_DEFAULTS: VoiceSettingsValue = {
   bargeInMode: 'auto',
   echoGateDb: 6,
   shortcut: 'Ctrl+Shift+V',
-  spokenFormat: true,
+  spokenFormat: false,
   senseVoice: true,
   wakeWord: '',
   toolBeep: false,
+  rewriteEnabled: false,
+  rewriteBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+  rewriteApiKeyRef: '',
+  rewriteModel: 'glm-4.5-air',
+  rewriteTimeoutMs: 8000,
+  rewriteMaxTokens: 400,
+  rewriteTemperature: 0,
+  rewriteCache: true,
+  rewriteDisableThinking: true,
+  rewriteContextChars: 800,
+  pronunciationFixes: '',
+  mathMode: 'rules',
 }
 
 /** 以平台常量默认构造设置 schema。 */
@@ -220,7 +260,7 @@ export function createVoiceSettingsSchema(defs?: Partial<VoiceSettingsValue>): z
     spokenFormat: z
       .boolean()
       .default(d.spokenFormat)
-      .description('语音会话注入口语化提示词（口语化短句、不用 Markdown 排版符号，朗读更顺更快；默认开，改动即时生效）'),
+      .description('语音会话注入排版与公式提示词（保留完整 Markdown 与 LaTeX 排版，并要求字面美元符号转义为 \\$；默认关，改动即时生效）'),
     senseVoice: z
       .boolean()
       .default(d.senseVoice)
@@ -230,6 +270,62 @@ export function createVoiceSettingsSchema(defs?: Partial<VoiceSettingsValue>): z
       .boolean()
       .default(d.toolBeep)
       .description('工具调用提示音（默认关）：开启后 AI 调用工具时"滴"一声，关闭则全程静默'),
+    rewriteEnabled: z
+      .boolean()
+      .default(d.rewriteEnabled)
+      .description('语音改编站总开关（默认关）：开启后公式/表格/代码先改写成口播稿再朗读；正文朗读不受影响，开启前不改动任何现有行为'),
+    rewriteBaseUrl: z
+      .string()
+      .default(d.rewriteBaseUrl)
+      .description('改写模型 OpenAI 兼容端点（默认智谱 GLM）；请求从宿主发出，密钥不上浏览器'),
+    rewriteApiKeyRef: z
+      .string()
+      .default(d.rewriteApiKeyRef)
+      .description('改写模型密钥的凭据引用（填环境变量名，如 GLM_API_KEY；密钥不写入配置明文）'),
+    rewriteModel: z
+      .string()
+      .default(d.rewriteModel)
+      .description('改写模型名（默认 glm-4.5-air）'),
+    rewriteTimeoutMs: z
+      .number()
+      .min(500)
+      .max(60000)
+      .default(d.rewriteTimeoutMs)
+      .description('改写请求超时毫秒（默认 8000；超时自动回退确定性读法）'),
+    rewriteMaxTokens: z
+      .number()
+      .min(64)
+      .max(4000)
+      .default(d.rewriteMaxTokens)
+      .description('改写输出 token 基线（默认 400）：插件会按片段长度自动上调（上限 2048），避免 JSON 被截断'),
+    rewriteTemperature: z
+      .number()
+      .min(0)
+      .max(2)
+      .default(d.rewriteTemperature)
+      .description('改写温度（默认 0，越低越稳定）'),
+    rewriteCache: z
+      .boolean()
+      .default(d.rewriteCache)
+      .description('相同片段复用讲稿（默认开，减少重复请求）'),
+    rewriteDisableThinking: z
+      .boolean()
+      .default(d.rewriteDisableThinking)
+      .description('关闭改写模型的思考链（默认开）：GLM-4.5 等思考型模型不关思考只会输出推理、正文为空，导致改写回退；仅端点支持 thinking 参数时有效'),
+    rewriteContextChars: z
+      .number()
+      .min(0)
+      .max(4000)
+      .default(d.rewriteContextChars)
+      .description('传给改写模型的前文字符上限（默认 800；实际长度按片段动态伸缩，短片段少给、大代码块/大表格多给；0 = 不给前文，仅保留符号表）'),
+    pronunciationFixes: z
+      .string()
+      .default(d.pronunciationFixes)
+      .description('多音字读音替代表（默认空 = 不改任何词）：每行「原词 => 同音替身」，替身必须与原词等字数，只允许同音替换，不允许增删字或改成同义词'),
+    mathMode: z
+      .union([z.const('rules'), z.const('model'), z.const('verbatim')])
+      .default(d.mathMode)
+      .description('数学朗读模式：rules 确定性规则（默认，零容错）/ model 交给改写模型 / verbatim 原样念出'),
   })
 }
 
@@ -248,7 +344,7 @@ export interface Config {
   ttsEngine: 'edge' | 'vits' | 'kokoro'
   /** Kokoro 模型精度（int8 默认 / fp32 音质更好）。 */
   kokoroModel: KokoroModel
-  /** 允许局域网访问 /voice-mode/*（默认仅回环；开启后建议前置认证门）。 */
+  /** 允许局域网访问 /voice-mode-adaptation/*（默认仅回环；开启后建议前置认证门）。 */
   allowLan: boolean
   /** 允许白名单之外的模型下载源（默认关；仅 https）。 */
   allowCustomModelHost: boolean
@@ -369,6 +465,79 @@ export function apply(ctx: Context, config: Config): void {
   )
   let vset: VoiceSettingsValue = settingsScope.get()
 
+  // --- 语音改编站：改写器（密钥按凭据引用逐次解析，明文不落配置）。 ---
+  let rewriter: SpeechRewriter | null = null
+  let rewriterSig = ''
+  /** 解析改写密钥：ctx.credentials（环境变量名引用）优先，process.env 兜底。 */
+  const resolveRewriteKey = async (): Promise<string> => {
+    const raw = vset.rewriteApiKeyRef.trim()
+    if (!raw) return ''
+    // 合法凭据引用（环境变量名）：走 DSH 凭据机制，再退环境变量。
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(raw)) {
+      const creds = ctx.get('credentials') as
+        | { resolve?: (r: string) => Promise<{ value?: string } | undefined> }
+        | undefined
+      if (creds && typeof creds.resolve === 'function') {
+        try {
+          const r = await creds.resolve(raw)
+          if (r && typeof r.value === 'string' && r.value) return r.value
+        } catch {
+          // 凭据服务未配置/不可用：回退环境变量
+        }
+      }
+      return process.env[raw] ?? ''
+    }
+    // 其它形态：按字面密钥使用（GUI 直接粘贴密钥的便捷路径）。
+    return raw
+  }
+  /** 仅在连接配置变化时重建（保留缓存）；开关关闭则置空。 */
+  const rebuildRewriter = (): void => {
+    const s = vset
+    const sig = [
+      s.rewriteEnabled, s.rewriteBaseUrl, s.rewriteApiKeyRef, s.rewriteModel,
+      s.rewriteTimeoutMs, s.rewriteMaxTokens, s.rewriteTemperature, s.rewriteCache,
+      s.rewriteDisableThinking,
+    ].join('|')
+    if (sig === rewriterSig) return
+    rewriterSig = sig
+    rewriter = s.rewriteEnabled
+      ? new SpeechRewriter({
+          baseUrl: s.rewriteBaseUrl,
+          apiKey: resolveRewriteKey,
+          model: s.rewriteModel,
+          timeoutMs: s.rewriteTimeoutMs,
+          maxTokens: s.rewriteMaxTokens,
+          temperature: s.rewriteTemperature,
+          cache: s.rewriteCache,
+          disableThinking: s.rewriteDisableThinking,
+        })
+      : null
+  }
+  rebuildRewriter()
+
+  // --- 语音改编站：多音字替代表（用户维护，默认空 = 不改任何词、也不纠音）。 ---
+  // 只强制「等字数」这一条不变量：字数不等的条目被拒绝并记录，绝不静默改名。
+  let pronunciation: PronunciationFix[] = []
+  let pronunciationRaw: string | null = null
+  let pronunciationErrors: string[] = []
+  const syncPronunciation = (): void => {
+    const raw = vset.pronunciationFixes ?? ''
+    if (raw === pronunciationRaw) return
+    pronunciationRaw = raw
+    const parsed = parsePronunciationFixes(raw)
+    pronunciation = parsed.fixes
+    pronunciationErrors = parsed.errors
+  }
+  syncPronunciation()
+
+  const speechConfig = (): SpeechAdapterConfig => ({
+    enabled: vset.rewriteEnabled,
+    mathMode: vset.mathMode,
+    rewriter,
+    pronunciation,
+    contextChars: vset.rewriteContextChars,
+  })
+
   // --- zipformer2 流式 ASR runtime（模型懒下载 + SHA256 校验，§8.3）。 ---
   // modelHost 用 getter：下载期读取最新设置（国内可切 hf-mirror，无需改 YAML）。
   const asr = createAsrRuntime({
@@ -426,6 +595,8 @@ export function apply(ctx: Context, config: Config): void {
   ctx.effect(() =>
     settingsScope.watch((next) => {
       vset = next
+      rebuildRewriter()
+      syncPronunciation()
       if (next.ttsEngine !== engineKind) {
         engineKind = next.ttsEngine
         queue.setEngine(makeEngine(engineKind))
@@ -497,6 +668,7 @@ export function apply(ctx: Context, config: Config): void {
       (state) => {
         if ((turnGen.get(sessionId) ?? 0) === gen) setTurn(sessionId, state)
       },
+      speechConfig,
     )
   })
 
@@ -511,9 +683,11 @@ export function apply(ctx: Context, config: Config): void {
         if (denyNonLoopback(req, res)) return
         respondJson(res, 200, {
           ok: true,
-          name: 'dsh-voice-mode',
+          name: 'dsh-voice-mode-adaptation',
           enabled: config.enabled,
           active: activeVoiceSession,
+          // 被拒绝的替代表行（字数不等 / 格式错）：给用户可见反馈，而不是静默忽略。
+          pronunciationErrors,
         })
       },
     }),
@@ -604,12 +778,68 @@ export function apply(ctx: Context, config: Config): void {
           try {
             buf = await queue.synthesize(sample, { voice, rate })
           } catch (e) {
-            console.warn(`[dsh-voice-mode] preview synthesis failed: ${String(e)}`)
+            console.warn(`[dsh-voice-mode-adaptation] preview synthesis failed: ${String(e)}`)
             respondJson(res, 502, { error: '预览合成失败：请检查网络或音色名（ShortName）是否正确' })
             return
           }
           res.writeHead(200, { 'content-type': queue.mime, 'cache-control': 'no-store' })
           res.end(buf)
+        })
+      },
+    }),
+  )
+
+  // --- 改写密钥：GUI 输入 → 宿主写入 DSH 凭据库（settings 只留引用名，明文不落配置）。 ---
+  ctx.effect(() =>
+    ctx.webServer.register({
+      kind: 'exact',
+      path: base + '/rewrite-key',
+      handler: (req: IncomingMessage, res: ServerResponse) => {
+        if (denyNonLoopback(req, res)) return
+        if (denyCrossOrigin(req, res)) return
+        if (req.method !== 'POST') {
+          respondJson(res, 405, { error: 'POST only' })
+          return
+        }
+        if (!limiter.hit('rewrite-key:' + (req.socket.remoteAddress ?? 'unknown'), 10, 60000)) {
+          respondJson(res, 429, { error: 'rate limited' })
+          return
+        }
+        collectBody(req, res, MAX_JSON_BODY, async (body) => {
+          let ref = ''
+          let value = ''
+          try {
+            const parsed = JSON.parse(body || '{}') as { ref?: unknown; value?: unknown }
+            ref = String(parsed.ref ?? '').trim()
+            value = String(parsed.value ?? '')
+          } catch {
+            // malformed -> 400 below
+          }
+          if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(ref)) {
+            respondJson(res, 400, { error: 'invalid ref (use an env-var name like GLM_API_KEY)' })
+            return
+          }
+          const creds = ctx.get('credentials') as
+            | {
+                set?: (r: string, v: string) => Promise<void>
+                unset?: (r: string) => Promise<void>
+              }
+            | undefined
+          if (!creds || typeof creds.set !== 'function') {
+            respondJson(res, 501, { error: 'credentials service unavailable' })
+            return
+          }
+          try {
+            if (!value.trim()) {
+              if (typeof creds.unset === 'function') await creds.unset(ref)
+              respondJson(res, 200, { ok: true, ref, cleared: true })
+              return
+            }
+            await creds.set(ref, value)
+            respondJson(res, 200, { ok: true, ref })
+          } catch (e) {
+            respondJson(res, 500, { error: 'store failed: ' + String((e as Error)?.message ?? e) })
+          }
         })
       },
     }),
@@ -835,7 +1065,7 @@ export function apply(ctx: Context, config: Config): void {
             .prepare()
             .then(() => respondJson(res, 200, { ok: true, engine }))
             .catch((e) => {
-              console.warn(`[dsh-voice-mode] model download failed: ${String(e)}`)
+              console.warn(`[dsh-voice-mode-adaptation] model download failed: ${String(e)}`)
               respondJson(res, 502, { error: '模型下载失败：请检查网络' })
             })
         })
@@ -959,7 +1189,7 @@ export function apply(ctx: Context, config: Config): void {
               res.end(JSON.stringify({ ok: true, mode }))
             })
             .catch((e) => {
-              console.warn(`[dsh-voice-mode] mode update failed: ${String(e)}`)
+              console.warn(`[dsh-voice-mode-adaptation] mode update failed: ${String(e)}`)
               res.statusCode = 500
               res.setHeader('content-type', 'application/json')
               res.end(JSON.stringify({ error: 'mode update failed' }))
@@ -1093,19 +1323,27 @@ async function* tapActiveStream(
   queue: TtsQueue,
   broadcast: (event: string, payload: unknown) => void,
   onTurn: (state: 'listening' | 'agent-speaking') => void,
+  getSpeechConfig: () => SpeechAdapterConfig,
 ): AsyncIterable<StreamChunk> {
-  const segmenter = new SentenceSegmenter()
   // P1-5 延迟埋点链：每回合至多广播一次 host 侧里程碑（首 token / 首句成型）。
   let firstTokenBroadcast = false
   let firstSentenceBroadcast = false
   let flushed = false
   let finishReason: unknown = null
+  const adapter = new SpeechAdapter({
+    config: getSpeechConfig,
+    onSentence: (s) => {
+      if (!firstSentenceBroadcast) {
+        firstSentenceBroadcast = true
+        broadcast('latency', { sessionId, stage: 'first-sentence-text' })
+      }
+      queue.enqueue(sessionId, s)
+    },
+  })
   const flushOnce = (): void => {
     if (flushed) return
     flushed = true
-    for (const s of segmenter.flush()) {
-      queue.enqueue(sessionId, s)
-    }
+    adapter.flush()
   }
   try {
     for await (const chunk of inner) {
@@ -1117,14 +1355,7 @@ async function* tapActiveStream(
           broadcast('latency', { sessionId, stage: 'first-llm-token' })
           onTurn('agent-speaking') // P2-4：LLM 开始作答
         }
-        for (const s of segmenter.feed(chunk.text)) {
-          // P1-5：首句成型并入 TTS 队列。
-          if (!firstSentenceBroadcast) {
-            firstSentenceBroadcast = true
-            broadcast('latency', { sessionId, stage: 'first-sentence-text' })
-          }
-          queue.enqueue(sessionId, s)
-        }
+        adapter.feed(chunk.text)
       }
       // 工具调用事件：提示音（toolBeep 设置项控制播放；默认关）。
       if (chunk.type === 'tool-call-delta' && chunk.name) {

@@ -1,6 +1,7 @@
 node_modules/
 *.tgz
 *.log
+package-lock.json
 .DS_Store
 research/
 # 凭据与密钥
