@@ -1,16 +1,16 @@
 {
   "name": "dsh-voice-mode-adaptation",
-  "description": "Full-duplex voice plugin for DeepSeek Harness: local zipformer2 streaming ASR (no API key) → editable draft; Edge TTS or local VITS / Kokoro read-aloud with live captions; true barge-in; hardened HTTP surface + model SHA256 pinning; compatible with all dsh releases since 0.1.1-rc.2 (verified 0.1.1 → 0.1.5-rc.2). · DSH 语音双工插件：流式识别入草稿、按句朗读+实时字幕、开口即打断；免 API Key、安全加固、全版本兼容（0.1.1-rc.2 起，含 0.1.5-rc.2 端到端验证）。",
-  "version": "0.7.7",
+  "description": "Full-duplex voice plugin for DeepSeek Harness: local zipformer2 streaming ASR (no API key) → editable draft; Edge TTS or local VITS / Kokoro read-aloud with live captions; true barge-in; hardened HTTP surface + model SHA256 pinning; compatible with all dsh releases since 0.1.1-rc.2 (verified 0.1.1 → 0.1.5-rc.2). · DSH 语音双工插件：流式识别入草稿、按句朗读+实时字幕、开口即打断；免 API Key、安全加固、全版本兼容（0.1.1-rc.2 起，含 0.1.5-rc.2 端到端验证）。· 本 fork 新增「语音改编站」：公式/表格/代码口述稿，屏幕 Markdown 完整保留。",
+  "version": "0.8.0-adaptation.1",
   "type": "module",
   "main": "lib/index.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/qishuilalala/dsh-voice-mode.git"
+    "url": "git+https://github.com/ranlinyi/dsh-voice-mode.git"
   },
-  "homepage": "https://github.com/qishuilalala/dsh-voice-mode#readme",
+  "homepage": "https://github.com/ranlinyi/dsh-voice-mode#readme",
   "bugs": {
-    "url": "https://github.com/qishuilalala/dsh-voice-mode/issues"
+    "url": "https://github.com/ranlinyi/dsh-voice-mode/issues"
   },
   "engines": {
     "node": ">=18.0.0",
