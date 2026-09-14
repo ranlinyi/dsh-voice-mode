@@ -13198,8 +13198,17 @@ function pushInline(node2, out, block, sentence) {
       }
   }
 }
+var SPOKEN_BLOCKS = /* @__PURE__ */ new Set(["code", "math", "table", "paragraph", "heading"]);
 function walkBlocks(nodes, out, ctx) {
   for (const node2 of nodes) {
+    if (ctx.lastKind !== null && SPOKEN_BLOCKS.has(node2.type) && SPOKEN_BLOCKS.has(ctx.lastKind)) {
+      out.push({
+        kind: "pause",
+        text: "",
+        block: ctx.n++,
+        meta: { pauseLevel: ctx.lastKind === "heading" ? "heading" : "block" }
+      });
+    }
     switch (node2.type) {
       case "code":
         out.push({ kind: "code", text: node2.value, meta: { lang: node2.lang || "" }, block: ctx.n++ });
@@ -13241,6 +13250,10 @@ function walkBlocks(nodes, out, ctx) {
           if (s) out.push({ kind: "prose", text: s, block: ctx.n++ });
         }
     }
+    if (SPOKEN_BLOCKS.has(node2.type)) ctx.lastKind = node2.type;
+  }
+  if (ctx.lastKind === "heading") {
+    out.push({ kind: "pause", text: "", block: ctx.n++, meta: { pauseLevel: "heading" } });
   }
 }
 function parseSpeechSegments(markdown) {
@@ -13252,7 +13265,7 @@ function parseSpeechSegments(markdown) {
     return [{ kind: "prose", text: markdown }];
   }
   const raw = [];
-  walkBlocks(tree.children ?? [], raw, { n: 0 });
+  walkBlocks(tree.children ?? [], raw, { n: 0, lastKind: null });
   const merged = [];
   for (const seg of raw) {
     const last = merged[merged.length - 1];
@@ -13264,6 +13277,10 @@ function parseSpeechSegments(markdown) {
   }
   const out = [];
   for (const s of merged) {
+    if (s.kind === "pause") {
+      out.push({ kind: "pause", text: "", meta: s.meta });
+      continue;
+    }
     if (!s.text || !s.text.trim()) continue;
     out.push(s.meta ? { kind: s.kind, text: s.text, meta: s.meta } : { kind: s.kind, text: s.text });
   }
@@ -13330,35 +13347,42 @@ var BlockRouter = class {
     }
     return out;
   }
+  /** 流式边界（空行 / 结构块前后）的停顿标记；换算成毫秒由适配器负责。 */
+  pushPause(out, level = "block") {
+    out.push({ kind: "pause", text: "", meta: { pauseLevel: level } });
+  }
   consumeLine(line, out) {
     if (this.struct) {
       this.struct.lines.push(line);
       if (this.struct.kind === "code" && isFenceClose(line, this.struct.open)) {
         out.push(...parseSpeechSegments(this.struct.lines.join("")));
         this.struct = null;
+        this.pushPause(out);
       } else if (this.struct.kind === "math" && mathClosed(this.struct.lines)) {
         out.push(...parseSpeechSegments(this.struct.lines.join("")));
         this.struct = null;
+        this.pushPause(out);
       }
       return;
     }
     const open = fenceOpenInfo(line);
     if (open) {
-      this.flushProse(out);
+      if (this.flushProse(out)) this.pushPause(out);
       this.struct = { kind: "code", open, lines: [line] };
       return;
     }
     if (mathOpen(line)) {
-      this.flushProse(out);
+      if (this.flushProse(out)) this.pushPause(out);
       this.struct = { kind: "math", lines: [line] };
       if (mathClosed(this.struct.lines)) {
         out.push(...parseSpeechSegments(this.struct.lines.join("")));
         this.struct = null;
+        this.pushPause(out);
       }
       return;
     }
     if (line.trim() === "") {
-      this.flushProse(out);
+      if (this.flushProse(out)) this.pushPause(out);
       return;
     }
     this.prose += line;
@@ -13366,13 +13390,15 @@ var BlockRouter = class {
       this.flushProse(out);
     }
   }
+  /** 冲刷累积正文；返回是否真的产出了内容（供调用方决定要不要补停顿）。 */
   flushProse(out) {
     if (!this.prose.trim()) {
       this.prose = "";
-      return;
+      return false;
     }
     out.push(...parseSpeechSegments(this.prose));
     this.prose = "";
+    return true;
   }
 };
 
@@ -13864,6 +13890,7 @@ function latexToSpeech(tex) {
 }
 
 // src/speech-adapter.ts
+var DEFAULT_BLOCK_PAUSE_MS = 350;
 var DEFAULT_CONTEXT_CAP = 800;
 var MIN_CONTEXT_CHARS = 120;
 var CONTEXT_GROWTH = 4;
@@ -13910,6 +13937,8 @@ var SpeechAdapter = class {
   recent = [];
   /** 本回合已确认的符号含义。 */
   symbols = /* @__PURE__ */ new Map();
+  /** 待兑现的停顿：下一个成句起播前插入（段落/标题边界）。 */
+  pendingPauseMs = 0;
   /** 喂入一个 text-delta。关闭改编站时退化为原路径（同步，无异步链）。 */
   feed(delta) {
     if (!delta) return;
@@ -13925,7 +13954,7 @@ var SpeechAdapter = class {
       for (const seg of this.router.flush()) this.schedule(seg);
     }
     this.run(() => {
-      for (const s of this.segmenter.flush()) this.opts.onSentence(s);
+      for (const s of this.segmenter.flush()) this.opts.onSentence(s, this.takePause());
     });
   }
   /** 等待链上所有异步改写完成（收尾/测试用）。 */
@@ -13950,6 +13979,15 @@ var SpeechAdapter = class {
   async handle(seg) {
     const cfg = this.opts.config();
     switch (seg.kind) {
+      case "pause": {
+        for (const s of this.segmenter.flush()) this.opts.onSentence(s);
+        const base = cfg.blockPauseMs === void 0 ? DEFAULT_BLOCK_PAUSE_MS : cfg.blockPauseMs;
+        if (base > 0) {
+          const factor = seg.meta && seg.meta.pauseLevel === "heading" ? 1.6 : 1;
+          this.pendingPauseMs = Math.max(this.pendingPauseMs, Math.round(base * factor));
+        }
+        return;
+      }
       case "prose":
         this.rememberProse(seg.text);
         this.emit(seg.text);
@@ -13999,7 +14037,12 @@ var SpeechAdapter = class {
   }
   emit(text5) {
     if (!text5 || !text5.trim()) return;
-    for (const s of this.segmenter.feed(text5)) this.opts.onSentence(s);
+    for (const s of this.segmenter.feed(text5)) this.opts.onSentence(s, this.takePause());
+  }
+  takePause() {
+    const ms = this.pendingPauseMs;
+    this.pendingPauseMs = 0;
+    return ms;
   }
   /** 记入前文（只收正文；超上限时丢最旧的）。 */
   rememberProse(text5) {
@@ -14046,6 +14089,55 @@ var SpeechAdapter = class {
 };
 
 // src/rewriter.ts
+var GUARD_PROFILES = {
+  // 放宽：只拦最明显的失控/照抄
+  lenient: { lengthFactor: 4, lengthBase: 80, echoRatio: 0.85, prefixEcho: false, sentenceEchoRatio: 0.9 },
+  standard: { lengthFactor: 3, lengthBase: 60, echoRatio: 0.6, prefixEcho: true, sentenceEchoRatio: 0.7 },
+  // 收紧：宁可回退也不放行可疑输出
+  strict: { lengthFactor: 2, lengthBase: 30, echoRatio: 0.5, prefixEcho: true, sentenceEchoRatio: 0.5 }
+};
+function escapeRegExp(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function parseGuardAllow(raw) {
+  const speech = [];
+  const segment = [];
+  const errors = [];
+  const lines = String(raw ?? "").split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i].trim();
+    if (!line || line.startsWith("#")) continue;
+    let target = "speech";
+    if (line.startsWith("seg:")) {
+      target = "segment";
+      line = line.slice(4).trim();
+    }
+    if (!line) continue;
+    const m = /^\/(.+)\/([a-z]*)$/.exec(line);
+    let re;
+    try {
+      if (m) {
+        const flags = m[2].includes("g") ? m[2] : m[2] + "g";
+        re = new RegExp(m[1], flags);
+      } else {
+        re = new RegExp(escapeRegExp(line), "g");
+      }
+    } catch (e) {
+      errors.push("\u7B2C " + (i + 1) + " \u884C\u89C4\u5219\u4E0D\u5408\u6CD5\uFF08" + (e instanceof Error ? e.message : String(e)) + "\uFF09\uFF1A" + lines[i].trim());
+      continue;
+    }
+    ;
+    (target === "segment" ? segment : speech).push(re);
+  }
+  return { speech, segment, errors };
+}
+function anyMatch(rules, text5) {
+  for (const re of rules) {
+    re.lastIndex = 0;
+    if (re.test(text5)) return true;
+  }
+  return false;
+}
 var PROMPT_VERSION = "sp6";
 var KIND_INSTRUCTIONS = {
   "display-math": "\u8FD9\u662F\u72EC\u7ACB\u5C55\u793A\u7684\u6570\u5B66\u516C\u5F0F\u3002\u7528\u4E00\u4E24\u53E5\u8BDD\u8BF4\u660E\u5B83\u8868\u8FBE\u7684\u5173\u7CFB\uFF08\u67D0\u4E2A\u91CF\u7B49\u4E8E\u4EC0\u4E48\u3001\u968F\u4EC0\u4E48\u53D8\u5316\uFF09\uFF1B\u53EA\u6709\u5728\u542B\u4E49\u786E\u5B9E\u4E0D\u660E\u663E\u65F6\u624D\u7B80\u8981\u63D0\u5230\u5173\u952E\u7B26\u53F7\uFF0C\u4E0D\u8981\u9010\u4E2A\u7F57\u5217\u7B26\u53F7\u542B\u4E49\uFF0C\u4E5F\u4E0D\u8981\u5C55\u5F00\u63A8\u5BFC\u3002",
@@ -14216,8 +14308,8 @@ var ECHO_MARKERS = [
 function looksLikePromptEcho(text5) {
   return ECHO_MARKERS.some((m) => text5.includes(m));
 }
-function withinLengthLimit(original, speech) {
-  return speech.length <= Math.max(original.length * 3, original.length + 60);
+function withinLengthLimit(original, speech, factor = 3, base = 60) {
+  return speech.length <= Math.max(original.length * factor, original.length + base);
 }
 function shingles(s, n = 6) {
   const t = s.replace(/\s+/g, "");
@@ -14335,6 +14427,8 @@ var SpeechRewriter = class _SpeechRewriter {
       cache: opts.cache ?? true,
       disableThinking: opts.disableThinking ?? true,
       jsonMode: opts.jsonMode ?? true,
+      guardMode: opts.guardMode ?? "standard",
+      guardAllow: opts.guardAllow ?? { speech: [], segment: [], errors: [] },
       fetchImpl: opts.fetchImpl ?? fetch
     };
   }
@@ -14374,19 +14468,29 @@ var SpeechRewriter = class _SpeechRewriter {
       if (call.content === null) return null;
       const parsed = parseSpeechResponse(call.content);
       if (!parsed) return null;
-      if (looksLikePromptEcho(parsed.speech)) return null;
-      if (!withinLengthLimit(text5, parsed.speech)) return null;
-      const before = req.context && req.context.before ? req.context.before : "";
-      const sentence = req.meta && req.meta.sentence ? req.meta.sentence : "";
-      const echoRef = sentence.length > before.length ? sentence : before;
-      if (echoRef.length >= 40 && parsed.speech.length >= 40 && contextEchoRatio(parsed.speech, echoRef) >= 0.6) {
-        return null;
+      const mode = this.opts.guardMode;
+      const allowRules = this.opts.guardAllow;
+      const modeOff = mode === "off" || mode === void 0;
+      const allowSeg = anyMatch(allowRules.segment, text5);
+      const allowSpeech = anyMatch(allowRules.speech, parsed.speech);
+      if (!modeOff && !allowSeg && !allowSpeech) {
+        const profile = GUARD_PROFILES[mode];
+        if (looksLikePromptEcho(parsed.speech)) return null;
+        if (!withinLengthLimit(text5, parsed.speech, profile.lengthFactor, profile.lengthBase)) return null;
+        const before = req.context && req.context.before ? req.context.before : "";
+        const sentence = req.meta && req.meta.sentence ? req.meta.sentence : "";
+        const echoRef = sentence.length > before.length ? sentence : before;
+        if (echoRef.length >= 40 && parsed.speech.length >= 40 && contextEchoRatio(parsed.speech, echoRef) >= profile.echoRatio) {
+          return null;
+        }
+        if (profile.prefixEcho && req.kind === "inline-math" && sentence) {
+          if (prefixEcho(parsed.speech, sentence, text5)) return null;
+        }
+        if (req.kind === "inline-math" && sentence) {
+          if (sentenceEchoRatio(parsed.speech, sentence, text5) >= profile.sentenceEchoRatio) return null;
+        }
+        if (!verifyNumbers(text5, parsed.speech)) return null;
       }
-      if (req.kind === "inline-math" && sentence) {
-        if (prefixEcho(parsed.speech, sentence, text5)) return null;
-        if (sentenceEchoRatio(parsed.speech, sentence, text5) >= 0.7) return null;
-      }
-      if (!verifyNumbers(text5, parsed.speech)) return null;
       const stored = parsed.symbols.length ? { text: parsed.speech, symbols: parsed.symbols } : { text: parsed.speech };
       if (this.opts.cache) this.remember(key, stored);
       return stored.symbols ? { text: stored.text, cached: false, symbols: stored.symbols } : { text: stored.text, cached: false };
@@ -14558,8 +14662,8 @@ var TtsQueue = class {
       this.listeners.delete(listener);
     };
   }
-  /** 为某会话入队一句；若泵空闲则启动。 */
-  enqueue(sessionId, text5) {
+  /** 为某会话入队一句（pauseBeforeMs = 起播前留白毫秒）；若泵空闲则启动。 */
+  enqueue(sessionId, text5, pauseBeforeMs = 0) {
     let q = this.queues.get(sessionId);
     if (!q) {
       q = { pending: [], busy: false, seq: 0, epoch: 0, errorNotified: false, backoff: 0 };
@@ -14569,7 +14673,7 @@ var TtsQueue = class {
       console.warn("[dsh-voice-mode-adaptation] TTS queue overflow, dropping oldest sentence");
       q.pending.shift();
     }
-    q.pending.push({ text: text5, epoch: q.epoch });
+    q.pending.push({ text: text5, epoch: q.epoch, pauseBeforeMs: pauseBeforeMs > 0 ? Math.round(pauseBeforeMs) : void 0 });
     void this.pump(sessionId, q);
   }
   /**
@@ -14640,7 +14744,8 @@ var TtsQueue = class {
           final: true,
           text: item.text,
           audio: "",
-          mime
+          mime,
+          pauseBeforeMs: item.pauseBeforeMs
         };
         for (const fn of this.listeners) {
           try {
@@ -15223,6 +15328,9 @@ var VOICE_SETTINGS_DEFAULTS = {
   rewriteContextChars: 800,
   pronunciationFixes: DEFAULT_PRONUNCIATION_TABLE,
   pronunciationEnabled: true,
+  guardMode: "standard",
+  guardAllowRules: "",
+  blockPauseMs: 350,
   mathMode: "rules"
 };
 function createVoiceSettingsSchema(defs) {
@@ -15264,6 +15372,9 @@ function createVoiceSettingsSchema(defs) {
     rewriteContextChars: z.number().min(0).max(4e3).default(d.rewriteContextChars).description("\u4F20\u7ED9\u6539\u5199\u6A21\u578B\u7684\u524D\u6587\u5B57\u7B26\u4E0A\u9650\uFF08\u9ED8\u8BA4 800\uFF1B\u5B9E\u9645\u957F\u5EA6\u6309\u7247\u6BB5\u52A8\u6001\u4F38\u7F29\uFF0C\u77ED\u7247\u6BB5\u5C11\u7ED9\u3001\u5927\u4EE3\u7801\u5757/\u5927\u8868\u683C\u591A\u7ED9\uFF1B0 = \u4E0D\u7ED9\u524D\u6587\uFF0C\u4EC5\u4FDD\u7559\u7B26\u53F7\u8868\uFF09"),
     pronunciationEnabled: z.boolean().default(d.pronunciationEnabled).description("\u542F\u7528\u591A\u97F3\u5B57\u7528\u6237\u8BCD\u8868\uFF08\u9ED8\u8BA4\u5F00\uFF09\u3002\u5173 = \u5B8C\u5168\u4E0D\u6539\u4EFB\u4F55\u6717\u8BFB\u6587\u672C\uFF08\u5C4F\u5E55\u672C\u6765\u5C31\u4E0D\u53D7\u5F71\u54CD\uFF09"),
     pronunciationFixes: z.string().default(d.pronunciationFixes).description("\u591A\u97F3\u5B57\u7528\u6237\u8BCD\u8868\uFF08\u53EF\u589E\u5220/\u6E05\u7A7A\uFF09\uFF1A\u6BCF\u884C\u300C\u539F\u8BCD => \u540C\u97F3\u66FF\u8EAB\u300D\uFF0C\u66FF\u8EAB\u5FC5\u987B\u4E0E\u539F\u8BCD\u7B49\u5B57\u6570\uFF0C\u53EA\u5141\u8BB8\u540C\u97F3\u66FF\u6362\uFF0C\u4E0D\u5141\u8BB8\u589E\u5220\u5B57\u6216\u6539\u6210\u540C\u4E49\u8BCD\uFF1B\u539F\u8BCD\u4E5F\u53EF\u5199\u6210\u6B63\u5219 /pattern/flags\uFF08\u7528\u4E8E\u300C\u7B2C N \u884C\u300D\u8FD9\u7C7B\u52A8\u6001\u4E0A\u4E0B\u6587\uFF0C\u6B64\u65F6\u8DF3\u8FC7\u7B49\u5B57\u6570\u6821\u9A8C\uFF0C\u66FF\u6362\u4E32\u652F\u6301 $1\uFF09\u3002\u9ED8\u8BA4\u503C\u662F\u4E00\u4EFD\u300C\u884C(h\xE1ng)\u300D\u540C\u97F3\u8BCD\u8868\uFF0C\u4E0D\u4EE3\u8868\u56FA\u5B9A\u5185\u7F6E\uFF0C\u968F\u65F6\u53EF\u6539"),
+    guardMode: z.union([z.const("off"), z.const("lenient"), z.const("standard"), z.const("strict")]).default(d.guardMode).description("\u6539\u5199\u5B88\u536B\u5F3A\u5EA6\uFF1Astandard \u9ED8\u8BA4 / lenient \u653E\u5BBD\uFF08\u66F4\u96BE\u89E6\u53D1\u56DE\u9000\uFF09/ strict \u6536\u7D27 / off \u5168\u5173\uFF08\u53EA\u4FDD\u7559 JSON \u534F\u8BAE\u89E3\u6790\uFF0C\u98CE\u9669\u81EA\u8D1F\uFF09"),
+    guardAllowRules: z.string().default(d.guardAllowRules).description("\u81EA\u5B9A\u4E49\u653E\u884C\u89C4\u5219\uFF08\u6BCF\u884C\u4E00\u6761\uFF0C# \u6CE8\u91CA\uFF09\uFF1A\u6574\u884C /\u6B63\u5219/flags \u547D\u4E2D\u300C\u6539\u5199\u7A3F\u300D\u5373\u653E\u884C\uFF1Bseg: \u524D\u7F00\u6539\u4E3A\u547D\u4E2D\u300C\u539F\u59CB\u7247\u6BB5\u300D\uFF08\u8BE5\u7247\u6BB5\u8DF3\u8FC7\u5168\u90E8\u5B88\u536B\uFF09\uFF1B\u5176\u5B83\u6309\u5B57\u9762\u6587\u5B57\u505A\u5B50\u4E32\u5339\u914D\u3002\u7528\u4E8E\u628A\u5B88\u536B\u8BEF\u6740\u7684\u8BFB\u6CD5\u653E\u884C"),
+    blockPauseMs: z.number().min(0).max(3e3).default(d.blockPauseMs).description('\u6BB5\u843D\u4E4B\u95F4\u7684\u505C\u987F\u6BEB\u79D2\uFF08\u9ED8\u8BA4 350\uFF1B0 = \u5173\uFF09\u3002\u6807\u9898\u4E4B\u540E\u7528 1.6 \u500D\u2014\u2014\u89E3\u51B3"\u6362\u6BB5/\u6807\u9898\u5230\u6B63\u6587\u4E00\u53E3\u6C14\u5FF5\u5B8C"\u7684\u4E0D\u81EA\u7136'),
     mathMode: z.union([z.const("rules"), z.const("model"), z.const("verbatim")]).default(d.mathMode).description("\u6570\u5B66\u6717\u8BFB\u6A21\u5F0F\uFF1Arules \u786E\u5B9A\u6027\u89C4\u5219\uFF08\u9ED8\u8BA4\uFF0C\u96F6\u5BB9\u9519\uFF09/ model \u4EA4\u7ED9\u6539\u5199\u6A21\u578B / verbatim \u539F\u6837\u5FF5\u51FA")
   });
 }
@@ -15344,6 +15455,15 @@ function apply(ctx, config) {
   let vset = settingsScope.get();
   let rewriter = null;
   let rewriterSig = "";
+  let guardAllow = { speech: [], segment: [], errors: [] };
+  let guardAllowRaw = null;
+  const syncGuard = () => {
+    const raw = vset.guardAllowRules ?? "";
+    if (raw === guardAllowRaw) return;
+    guardAllowRaw = raw;
+    guardAllow = parseGuardAllow(raw);
+  };
+  syncGuard();
   const resolveRewriteKey = async () => {
     const raw = vset.rewriteApiKeyRef.trim();
     if (!raw) return "";
@@ -15371,7 +15491,9 @@ function apply(ctx, config) {
       s.rewriteMaxTokens,
       s.rewriteTemperature,
       s.rewriteCache,
-      s.rewriteDisableThinking
+      s.rewriteDisableThinking,
+      s.guardMode,
+      guardAllowRaw
     ].join("|");
     if (sig === rewriterSig) return;
     rewriterSig = sig;
@@ -15383,7 +15505,9 @@ function apply(ctx, config) {
       maxTokens: s.rewriteMaxTokens,
       temperature: s.rewriteTemperature,
       cache: s.rewriteCache,
-      disableThinking: s.rewriteDisableThinking
+      disableThinking: s.rewriteDisableThinking,
+      guardMode: s.guardMode,
+      guardAllow
     }) : null;
   };
   rebuildRewriter();
@@ -15404,7 +15528,8 @@ function apply(ctx, config) {
     mathMode: vset.mathMode,
     rewriter,
     pronunciation,
-    contextChars: vset.rewriteContextChars
+    contextChars: vset.rewriteContextChars,
+    blockPauseMs: vset.blockPauseMs
   });
   const asr = createAsrRuntime({
     cacheDir: config.cacheDir,
@@ -15449,6 +15574,8 @@ function apply(ctx, config) {
   ctx.effect(
     () => settingsScope.watch((next) => {
       vset = next;
+      guardAllowRaw = null;
+      syncGuard();
       rebuildRewriter();
       syncPronunciation();
       if (next.ttsEngine !== engineKind) {
@@ -15516,8 +15643,9 @@ function apply(ctx, config) {
           name: "dsh-voice-mode-adaptation",
           enabled: config.enabled,
           active: activeVoiceSession,
-          // 被拒绝的替代表行（字数不等 / 格式错）：给用户可见反馈，而不是静默忽略。
-          pronunciationErrors
+          // 被拒绝的替代表行 / 放行规则行：给用户可见反馈，而不是静默忽略。
+          pronunciationErrors,
+          guardErrors: guardAllow.errors
         });
       }
     })
@@ -16047,12 +16175,12 @@ async function* tapActiveStream(sessionId, inner, queue, broadcast, onTurn, getS
   let finishReason = null;
   const adapter = new SpeechAdapter({
     config: getSpeechConfig,
-    onSentence: (s) => {
+    onSentence: (s, pauseBeforeMs) => {
       if (!firstSentenceBroadcast) {
         firstSentenceBroadcast = true;
         broadcast("latency", { sessionId, stage: "first-sentence-text" });
       }
-      queue.enqueue(sessionId, s);
+      queue.enqueue(sessionId, s, pauseBeforeMs);
     }
   });
   const flushOnce = () => {

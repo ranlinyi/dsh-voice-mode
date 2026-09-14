@@ -49,6 +49,86 @@ export interface RewriteRequest {
   context?: RewriteContext
 }
 
+/** 守卫强度：off 全关 / lenient 放宽 / standard 默认 / strict 收紧。 */
+export type GuardMode = 'off' | 'lenient' | 'standard' | 'strict'
+
+/** 用户自定义放行规则（命中即跳过全部守卫，直接采用模型输出）。 */
+export interface GuardAllowRules {
+  /** 正则命中「改写稿」即放行。 */
+  speech: RegExp[]
+  /** 正则命中「原始片段」即放行（这一类片段完全跳过守卫）。 */
+  segment: RegExp[]
+  /** 被拒绝的行（供设置页/状态接口提示）。 */
+  errors: string[]
+}
+
+/** 各档位的具体阈值（长度上限、回显重合率、复述判定阈值）。 */
+interface GuardProfile {
+  lengthFactor: number
+  lengthBase: number
+  echoRatio: number
+  prefixEcho: boolean
+  sentenceEchoRatio: number
+}
+
+const GUARD_PROFILES: Record<Exclude<GuardMode, 'off'>, GuardProfile> = {
+  // 放宽：只拦最明显的失控/照抄
+  lenient: { lengthFactor: 4, lengthBase: 80, echoRatio: 0.85, prefixEcho: false, sentenceEchoRatio: 0.9 },
+  standard: { lengthFactor: 3, lengthBase: 60, echoRatio: 0.6, prefixEcho: true, sentenceEchoRatio: 0.7 },
+  // 收紧：宁可回退也不放行可疑输出
+  strict: { lengthFactor: 2, lengthBase: 30, echoRatio: 0.5, prefixEcho: true, sentenceEchoRatio: 0.5 },
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * 解析放行规则（每行一条；空行与 # 注释忽略）：
+ *  - 整行是 /pattern/flags → 对「改写稿」跑正则
+ *  - seg: 前缀          → 改为对「原始片段」跑正则（该片段跳过全部守卫）
+ *  - 其它               → 当作字面文字，对「改写稿」做子串匹配
+ */
+export function parseGuardAllow(raw: string): GuardAllowRules {
+  const speech: RegExp[] = []
+  const segment: RegExp[] = []
+  const errors: string[] = []
+  const lines = String(raw ?? '').split(/\r?\n/)
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i].trim()
+    if (!line || line.startsWith('#')) continue
+    let target: 'speech' | 'segment' = 'speech'
+    if (line.startsWith('seg:')) {
+      target = 'segment'
+      line = line.slice(4).trim()
+    }
+    if (!line) continue
+    const m = /^\/(.+)\/([a-z]*)$/.exec(line)
+    let re: RegExp
+    try {
+      if (m) {
+        const flags = m[2].includes('g') ? m[2] : m[2] + 'g'
+        re = new RegExp(m[1], flags)
+      } else {
+        re = new RegExp(escapeRegExp(line), 'g')
+      }
+    } catch (e) {
+      errors.push('第 ' + (i + 1) + ' 行规则不合法（' + (e instanceof Error ? e.message : String(e)) + '）：' + lines[i].trim())
+      continue
+    }
+    ;(target === 'segment' ? segment : speech).push(re)
+  }
+  return { speech, segment, errors }
+}
+
+function anyMatch(rules: RegExp[], text: string): boolean {
+  for (const re of rules) {
+    re.lastIndex = 0
+    if (re.test(text)) return true
+  }
+  return false
+}
+
 export interface RewriteOptions {
   baseUrl: string
   /** 密钥字面量，或逐次解析的提供函数（凭据引用优先，明文不落配置）。 */
@@ -62,6 +142,10 @@ export interface RewriteOptions {
   disableThinking?: boolean
   /** 请求体带 response_format: json_object（端点不支持时自动去掉重试一次）；默认 true。 */
   jsonMode?: boolean
+  /** 守卫强度（默认 standard）。off = 完全不跑守卫，只保留 JSON 协议解析。 */
+  guardMode?: GuardMode
+  /** 自定义放行规则（默认空）。 */
+  guardAllow?: GuardAllowRules
   /** 注入点：便于测试替换；默认用全局 fetch。 */
   fetchImpl?: typeof fetch
 }
@@ -253,8 +337,8 @@ export function looksLikePromptEcho(text: string): boolean {
 }
 
 /** 第二道守卫：长度上限（防模型失控/循环输出）。 */
-export function withinLengthLimit(original: string, speech: string): boolean {
-  return speech.length <= Math.max(original.length * 3, original.length + 60)
+export function withinLengthLimit(original: string, speech: string, factor = 3, base = 60): boolean {
+  return speech.length <= Math.max(original.length * factor, original.length + base)
 }
 
 function shingles(s: string, n = 6): Set<string> {
@@ -406,6 +490,8 @@ export class SpeechRewriter {
       cache: opts.cache ?? true,
       disableThinking: opts.disableThinking ?? true,
       jsonMode: opts.jsonMode ?? true,
+      guardMode: opts.guardMode ?? 'standard',
+      guardAllow: opts.guardAllow ?? { speech: [], segment: [], errors: [] },
       fetchImpl: opts.fetchImpl ?? fetch,
     }
   }
@@ -454,22 +540,34 @@ export class SpeechRewriter {
 
       const parsed = parseSpeechResponse(call.content)
       if (!parsed) return null
-      if (looksLikePromptEcho(parsed.speech)) return null
-      if (!withinLengthLimit(text, parsed.speech)) return null
-      // 回显守卫：取「整句原文」与「前文」里更长的那个作为参照（两者都可能被模型照抄）。
-      const before = req.context && req.context.before ? req.context.before : ''
-      const sentence = req.meta && req.meta.sentence ? req.meta.sentence : ''
-      const echoRef = sentence.length > before.length ? sentence : before
-      if (echoRef.length >= 40 && parsed.speech.length >= 40 && contextEchoRatio(parsed.speech, echoRef) >= 0.6) {
-        return null
+
+      // --- 守卫：档位可调 + 用户放行规则（guardMode=off 或任一规则命中即全部跳过）---
+      const mode = this.opts.guardMode
+      const allowRules = this.opts.guardAllow
+      const modeOff = mode === 'off' || mode === undefined
+      const allowSeg = anyMatch(allowRules.segment, text)
+      const allowSpeech = anyMatch(allowRules.speech, parsed.speech)
+      if (!modeOff && !allowSeg && !allowSpeech) {
+        const profile = GUARD_PROFILES[mode]
+        if (looksLikePromptEcho(parsed.speech)) return null
+        if (!withinLengthLimit(text, parsed.speech, profile.lengthFactor, profile.lengthBase)) return null
+        // 回显守卫：取「整句原文」与「前文」里更长的那个作为参照（两者都可能被模型照抄）。
+        const before = req.context && req.context.before ? req.context.before : ''
+        const sentence = req.meta && req.meta.sentence ? req.meta.sentence : ''
+        const echoRef = sentence.length > before.length ? sentence : before
+        if (echoRef.length >= 40 && parsed.speech.length >= 40 && contextEchoRatio(parsed.speech, echoRef) >= profile.echoRatio) {
+          return null
+        }
+        // 行内公式的复述守卫：模型会把整句原样吐回来（"平均/最坏 O(n 平方)，最好 O(n)。"），
+        // 导致朗读重复；短句同样要保护（旧实现被 echoRef.length >= 40 短路）。
+        if (profile.prefixEcho && req.kind === 'inline-math' && sentence) {
+          if (prefixEcho(parsed.speech, sentence, text)) return null
+        }
+        if (req.kind === 'inline-math' && sentence) {
+          if (sentenceEchoRatio(parsed.speech, sentence, text) >= profile.sentenceEchoRatio) return null
+        }
+        if (!verifyNumbers(text, parsed.speech)) return null
       }
-      // 行内公式的复述守卫：旧实现被 echoRef.length >= 40 短路，短句完全没保护。
-      // 模型会把整句原样吐回来（"平均/最坏 O(n 平方)，最好 O(n)。"），导致朗读重复。
-      if (req.kind === 'inline-math' && sentence) {
-        if (prefixEcho(parsed.speech, sentence, text)) return null
-        if (sentenceEchoRatio(parsed.speech, sentence, text) >= 0.7) return null
-      }
-      if (!verifyNumbers(text, parsed.speech)) return null
 
       const stored = parsed.symbols.length
         ? { text: parsed.speech, symbols: parsed.symbols }

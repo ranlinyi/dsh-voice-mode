@@ -27,7 +27,7 @@ import { homedir } from 'node:os'
 import { rm } from 'node:fs/promises'
 import { createAsrRuntime, handleAsrRequest } from './asr-host.ts'
 import { SpeechAdapter, type SpeechAdapterConfig } from './speech-adapter.ts'
-import { SpeechRewriter } from './rewriter.ts'
+import { SpeechRewriter, parseGuardAllow, type GuardAllowRules, type GuardMode } from './rewriter.ts'
 import { DEFAULT_PRONUNCIATION_TABLE, parsePronunciationFixes, type PronunciationFix } from './segmenter.ts'
 import { EdgeTtsEngine, TtsQueue, listEdgeVoices, type TtsEngine } from './tts-queue.ts'
 import { createSherpaVitsEngine, createSherpaKokoroEngine, TTS_MODEL_REPO, kokoroModelDir, type KokoroModel } from './tts-local.ts'
@@ -172,6 +172,12 @@ export interface VoiceSettingsValue {
   pronunciationFixes: string
   /** 是否启用上面的用户词表（默认开）。关 = 完全不改任何朗读文本。 */
   pronunciationEnabled: boolean
+  /** 改写守卫强度：off 全关 / lenient 放宽 / standard 默认 / strict 收紧。 */
+  guardMode: GuardMode
+  /** 自定义放行规则（每行一条；命中即跳过全部守卫）。 */
+  guardAllowRules: string
+  /** 段落之间的停顿毫秒（0 = 关；默认 350）；标题之后用 1.6 倍。 */
+  blockPauseMs: number
   /** 数学朗读模式：rules 确定性规则（默认）/ model 交给改写模型 / verbatim 原样。 */
   mathMode: 'rules' | 'model' | 'verbatim'
 }
@@ -208,6 +214,9 @@ const VOICE_SETTINGS_DEFAULTS: VoiceSettingsValue = {
   rewriteContextChars: 800,
   pronunciationFixes: DEFAULT_PRONUNCIATION_TABLE,
   pronunciationEnabled: true,
+  guardMode: 'standard',
+  guardAllowRules: '',
+  blockPauseMs: 350,
   mathMode: 'rules',
 }
 
@@ -330,7 +339,20 @@ export function createVoiceSettingsSchema(defs?: Partial<VoiceSettingsValue>): z
       .string()
       .default(d.pronunciationFixes)
       .description('多音字用户词表（可增删/清空）：每行「原词 => 同音替身」，替身必须与原词等字数，只允许同音替换，不允许增删字或改成同义词；原词也可写成正则 /pattern/flags（用于「第 N 行」这类动态上下文，此时跳过等字数校验，替换串支持 $1）。默认值是一份「行(háng)」同音词表，不代表固定内置，随时可改'),
-  
+    guardMode: z
+      .union([z.const('off'), z.const('lenient'), z.const('standard'), z.const('strict')])
+      .default(d.guardMode)
+      .description('改写守卫强度：standard 默认 / lenient 放宽（更难触发回退）/ strict 收紧 / off 全关（只保留 JSON 协议解析，风险自负）'),
+    guardAllowRules: z
+      .string()
+      .default(d.guardAllowRules)
+      .description('自定义放行规则（每行一条，# 注释）：整行 /正则/flags 命中「改写稿」即放行；seg: 前缀改为命中「原始片段」（该片段跳过全部守卫）；其它按字面文字做子串匹配。用于把守卫误杀的读法放行'),
+    blockPauseMs: z
+      .number()
+      .min(0)
+      .max(3000)
+      .default(d.blockPauseMs)
+      .description('段落之间的停顿毫秒（默认 350；0 = 关）。标题之后用 1.6 倍——解决"换段/标题到正文一口气念完"的不自然'),
     mathMode: z
       .union([z.const('rules'), z.const('model'), z.const('verbatim')])
       .default(d.mathMode)
@@ -477,6 +499,16 @@ export function apply(ctx: Context, config: Config): void {
   // --- 语音改编站：改写器（密钥按凭据引用逐次解析，明文不落配置）。 ---
   let rewriter: SpeechRewriter | null = null
   let rewriterSig = ''
+  /** 放行规则解析结果（解析错误照常回报，便于用户发现写法问题）。 */
+  let guardAllow: GuardAllowRules = { speech: [], segment: [], errors: [] }
+  let guardAllowRaw: string | null = null
+  const syncGuard = (): void => {
+    const raw = vset.guardAllowRules ?? ''
+    if (raw === guardAllowRaw) return
+    guardAllowRaw = raw
+    guardAllow = parseGuardAllow(raw)
+  }
+  syncGuard()
   /** 解析改写密钥：ctx.credentials（环境变量名引用）优先，process.env 兜底。 */
   const resolveRewriteKey = async (): Promise<string> => {
     const raw = vset.rewriteApiKeyRef.trim()
@@ -505,7 +537,7 @@ export function apply(ctx: Context, config: Config): void {
     const sig = [
       s.rewriteEnabled, s.rewriteBaseUrl, s.rewriteApiKeyRef, s.rewriteModel,
       s.rewriteTimeoutMs, s.rewriteMaxTokens, s.rewriteTemperature, s.rewriteCache,
-      s.rewriteDisableThinking,
+      s.rewriteDisableThinking, s.guardMode, guardAllowRaw,
     ].join('|')
     if (sig === rewriterSig) return
     rewriterSig = sig
@@ -519,6 +551,8 @@ export function apply(ctx: Context, config: Config): void {
           temperature: s.rewriteTemperature,
           cache: s.rewriteCache,
           disableThinking: s.rewriteDisableThinking,
+          guardMode: s.guardMode,
+          guardAllow,
         })
       : null
   }
@@ -546,6 +580,7 @@ export function apply(ctx: Context, config: Config): void {
     rewriter,
     pronunciation,
     contextChars: vset.rewriteContextChars,
+    blockPauseMs: vset.blockPauseMs,
   })
 
   // --- zipformer2 流式 ASR runtime（模型懒下载 + SHA256 校验，§8.3）。 ---
@@ -605,6 +640,9 @@ export function apply(ctx: Context, config: Config): void {
   ctx.effect(() =>
     settingsScope.watch((next) => {
       vset = next
+      // 放行规则先解析，rebuildRewriter 的签名与构造都要用到它。
+      guardAllowRaw = null
+      syncGuard()
       rebuildRewriter()
       syncPronunciation()
       if (next.ttsEngine !== engineKind) {
@@ -696,8 +734,9 @@ export function apply(ctx: Context, config: Config): void {
           name: 'dsh-voice-mode-adaptation',
           enabled: config.enabled,
           active: activeVoiceSession,
-          // 被拒绝的替代表行（字数不等 / 格式错）：给用户可见反馈，而不是静默忽略。
+          // 被拒绝的替代表行 / 放行规则行：给用户可见反馈，而不是静默忽略。
           pronunciationErrors,
+          guardErrors: guardAllow.errors,
         })
       },
     }),
@@ -1342,12 +1381,12 @@ async function* tapActiveStream(
   let finishReason: unknown = null
   const adapter = new SpeechAdapter({
     config: getSpeechConfig,
-    onSentence: (s) => {
+    onSentence: (s, pauseBeforeMs) => {
       if (!firstSentenceBroadcast) {
         firstSentenceBroadcast = true
         broadcast('latency', { sessionId, stage: 'first-sentence-text' })
       }
-      queue.enqueue(sessionId, s)
+      queue.enqueue(sessionId, s, pauseBeforeMs)
     },
   })
   const flushOnce = (): void => {

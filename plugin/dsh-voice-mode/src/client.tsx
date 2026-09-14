@@ -83,6 +83,8 @@ interface TtsChunkFrame {
   audio: string
   /** 音频 MIME（audio/mpeg = Edge；audio/wav = 本地 VITS/Kokoro）。 */
   mime?: string
+  /** 本句起播前的静音毫秒（段落/标题边界由 host 下发）。 */
+  pauseBeforeMs?: number
 }
 
 /** 播放引擎的整句帧（客户端按句拼帧后的产物；P1-2 Web Audio 队列的输入）。 */
@@ -95,6 +97,8 @@ interface PlayFrame {
   audio: Uint8Array<ArrayBuffer>
   /** 音频 MIME（audio/mpeg = Edge；audio/wav = 本地 VITS/Kokoro；降级 <audio> 路径用）。 */
   mime?: string
+  /** 本句起播前的静音毫秒（段落/标题边界）。 */
+  pauseBeforeMs?: number
 }
 
 /**
@@ -434,7 +438,11 @@ function createAudioEngine(
     }
     setUi({ playing: true, playingCaption: frame.text, ttsNotice: null })
     fixtureRecorder.mark('tts-sentence', frame.text)
-    void fallbackAudio.play().catch(() => playFallback())
+    // 降级路径也要留出段落/标题停顿（Web Audio 路径在调度时刻留白）。
+    const fallbackGap = Math.max(0, frame.pauseBeforeMs ?? 0)
+    const startFallback = (): void => void fallbackAudio.play().catch(() => playFallback())
+    if (fallbackGap > 0) setTimeout(startFallback, fallbackGap)
+    else startFallback()
   }
 
   /** 解码串行队列：保持句序，decode 完成即无缝调度（音频线程精度）。 */
@@ -451,7 +459,9 @@ function createAudioEngine(
           if (pending.length === 0 || pending[0] !== frame) return
           pending.shift()
           const t0 = ctx!.currentTime
-          const at = Math.max(t0 + 0.02, nextEndAt)
+          // 段落/标题边界：在上一句结束时刻之后再留白 pauseBeforeMs（默认 0 = 原无缝行为）。
+          const gapS = Math.max(0, frame.pauseBeforeMs ?? 0) / 1000
+          const at = Math.max(t0 + 0.02, nextEndAt + gapS)
           const src = ctx!.createBufferSource()
           src.buffer = buf
           src.connect(duckGain!)
@@ -941,6 +951,7 @@ function createVoiceBus(basePath: string = BASE_PATH, ctx?: any): VoiceBus {
         text: frame.text ?? '',
         audio: buf,
         mime: frame.mime,
+        pauseBeforeMs: frame.pauseBeforeMs,
       })
       lastFinalSeq.set(frame.sessionId, frame.sentenceId)
       return

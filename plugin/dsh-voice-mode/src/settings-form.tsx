@@ -80,6 +80,9 @@ const FIELD_LABELS: Record<string, string> = {
   rewriteContextChars: '上下文长度',
   pronunciationEnabled: '启用多音字词表',
   pronunciationFixes: '多音字用户词表',
+  guardMode: '改写守卫强度',
+  guardAllowRules: '守卫放行规则',
+  blockPauseMs: '段落停顿',
   rewriteSecret: '写入密钥',
 }
 const setHeader: React.CSSProperties = {
@@ -1245,6 +1248,25 @@ export function VoiceSettingsCard({ scope }: { scope: ScopeController }): React.
             </Row>
             <Row name="pronunciationFixes" desc={tr('descPronunciationFixes')}>
               <TextAreaField score={scope} field="pronunciationFixes" value={value.pronunciationFixes ?? ''} placeholder="词 => 同音替词；/正则/ => 替换" rows={4} />
+            </Row>
+            <Row name="guardMode" desc={tr('descGuardMode')}>
+              <SegGroup
+                score={scope}
+                field="guardMode"
+                value={value.guardMode}
+                options={[
+                  { v: 'off', label: tr('guardModeOff') },
+                  { v: 'lenient', label: tr('guardModeLenient') },
+                  { v: 'standard', label: tr('guardModeStandard') },
+                  { v: 'strict', label: tr('guardModeStrict') },
+                ]}
+              />
+            </Row>
+            <Row name="guardAllowRules" desc={tr('descGuardAllowRules')}>
+              <TextAreaField score={scope} field="guardAllowRules" value={value.guardAllowRules ?? ''} placeholder="大 O；seg:/^O\(/；/^大 Omega/" rows={3} />
+            </Row>
+            <Row name="blockPauseMs" desc={tr('descBlockPause')}>
+              <NumberField score={scope} field="blockPauseMs" value={value.blockPauseMs ?? 350} min={0} max={3000} step={50} />
             </Row>
             </Section>
             <Section title={tr('secModel')}>

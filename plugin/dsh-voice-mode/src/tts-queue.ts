@@ -81,6 +81,8 @@ export interface TtsChunkFrame {
   audio: string
   /** 音频 MIME（client 据此构造 Blob 类型：audio/wav 或 audio/mpeg）。 */
   mime?: string
+  /** 本句起播前插入的静音毫秒（段落/标题边界；client 在链式调度里留白）。 */
+  pauseBeforeMs?: number
 }
 
 export type FrameListener = (frame: TtsChunkFrame) => void
@@ -171,6 +173,8 @@ export async function listEdgeVoices(force = false): Promise<Array<{ ShortName: 
 interface QueuedSentence {
   text: string
   epoch: number
+  /** 本句起播前的静音毫秒（段落/标题边界）。 */
+  pauseBeforeMs?: number
 }
 
 interface SessionQueue {
@@ -246,8 +250,8 @@ export class TtsQueue {
     }
   }
 
-  /** 为某会话入队一句；若泵空闲则启动。 */
-  enqueue(sessionId: string, text: string): void {
+  /** 为某会话入队一句（pauseBeforeMs = 起播前留白毫秒）；若泵空闲则启动。 */
+  enqueue(sessionId: string, text: string, pauseBeforeMs = 0): void {
     let q = this.queues.get(sessionId)
     if (!q) {
       q = { pending: [], busy: false, seq: 0, epoch: 0, errorNotified: false, backoff: 0 }
@@ -260,7 +264,7 @@ export class TtsQueue {
       console.warn('[dsh-voice-mode-adaptation] TTS queue overflow, dropping oldest sentence')
       q.pending.shift()
     }
-    q.pending.push({ text, epoch: q.epoch })
+    q.pending.push({ text, epoch: q.epoch, pauseBeforeMs: pauseBeforeMs > 0 ? Math.round(pauseBeforeMs) : undefined })
     void this.pump(sessionId, q)
   }
 
@@ -345,6 +349,7 @@ export class TtsQueue {
           text: item.text,
           audio: '',
           mime,
+          pauseBeforeMs: item.pauseBeforeMs,
         }
         for (const fn of this.listeners) {
           try {

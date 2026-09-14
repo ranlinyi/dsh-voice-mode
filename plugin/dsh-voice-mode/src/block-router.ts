@@ -30,6 +30,8 @@ export type SpeechKind =
   | 'table'
   | 'footnote-ref'
   | 'footnote-def'
+  /** 停顿标记（text 为空）：段落/标题边界，交由适配器换算成静音毫秒。 */
+  | 'pause'
 
 export interface SpeechSegment {
   kind: SpeechKind
@@ -47,6 +49,8 @@ export interface SpeechSegment {
      * 里它们还没到；把它一并交给改写器，才能分清「点/区间」「趋向/映射」。
      */
     sentence?: string
+    /** pause 片段：block = 段落之间；heading = 标题之后（停顿更长）。 */
+    pauseLevel?: 'block' | 'heading'
   }
 }
 
@@ -95,8 +99,26 @@ function pushInline(node: any, out: RawSegment[], block: number, sentence?: stri
   }
 }
 
-function walkBlocks(nodes: any[], out: RawSegment[], ctx: { n: number }): void {
+/** 会产出朗读内容的块类型（用于在相邻块之间插入停顿）。 */
+const SPOKEN_BLOCKS = new Set(['code', 'math', 'table', 'paragraph', 'heading'])
+
+interface WalkCtx {
+  n: number
+  /** 上一个会朗读的块类型（null = 首个块，不插停顿）。 */
+  lastKind: string | null
+}
+
+function walkBlocks(nodes: any[], out: RawSegment[], ctx: WalkCtx): void {
   for (const node of nodes) {
+    // 相邻块之间插停顿：标题之后更长（标题→正文是最明显的"该停一下"）。
+    if (ctx.lastKind !== null && SPOKEN_BLOCKS.has(node.type) && SPOKEN_BLOCKS.has(ctx.lastKind)) {
+      out.push({
+        kind: 'pause',
+        text: '',
+        block: ctx.n++,
+        meta: { pauseLevel: ctx.lastKind === 'heading' ? 'heading' : 'block' },
+      })
+    }
     switch (node.type) {
       case 'code':
         out.push({ kind: 'code', text: node.value, meta: { lang: node.lang || '' }, block: ctx.n++ })
@@ -139,6 +161,12 @@ function walkBlocks(nodes: any[], out: RawSegment[], ctx: { n: number }): void {
           if (s) out.push({ kind: 'prose', text: s, block: ctx.n++ })
         }
     }
+    if (SPOKEN_BLOCKS.has(node.type)) ctx.lastKind = node.type
+  }
+  // 标题单独成块（后面跟空行）时也要有"标题后停顿"：补一个尾随标记。
+  // 流式层在空行处还会补一个 block 停顿，适配器取 max → 最终按 heading 处理。
+  if (ctx.lastKind === 'heading') {
+    out.push({ kind: 'pause', text: '', block: ctx.n++, meta: { pauseLevel: 'heading' } })
   }
 }
 
@@ -156,7 +184,7 @@ export function parseSpeechSegments(markdown: string): SpeechSegment[] {
     return [{ kind: 'prose', text: markdown }]
   }
   const raw: RawSegment[] = []
-  walkBlocks(tree.children ?? [], raw, { n: 0 })
+  walkBlocks(tree.children ?? [], raw, { n: 0, lastKind: null })
   const merged: RawSegment[] = []
   for (const seg of raw) {
     const last = merged[merged.length - 1]
@@ -168,6 +196,10 @@ export function parseSpeechSegments(markdown: string): SpeechSegment[] {
   }
   const out: SpeechSegment[] = []
   for (const s of merged) {
+    if (s.kind === 'pause') {
+      out.push({ kind: 'pause', text: '', meta: s.meta })
+      continue
+    }
     if (!s.text || !s.text.trim()) continue
     out.push(s.meta ? { kind: s.kind, text: s.text, meta: s.meta } : { kind: s.kind, text: s.text })
   }
@@ -261,35 +293,43 @@ export class BlockRouter {
     return out
   }
 
+  /** 流式边界（空行 / 结构块前后）的停顿标记；换算成毫秒由适配器负责。 */
+  private pushPause(out: SpeechSegment[], level: 'block' | 'heading' = 'block'): void {
+    out.push({ kind: 'pause', text: '', meta: { pauseLevel: level } })
+  }
+
   private consumeLine(line: string, out: SpeechSegment[]): void {
     if (this.struct) {
       this.struct.lines.push(line)
       if (this.struct.kind === 'code' && isFenceClose(line, this.struct.open)) {
         out.push(...parseSpeechSegments(this.struct.lines.join('')))
         this.struct = null
+        this.pushPause(out)
       } else if (this.struct.kind === 'math' && mathClosed(this.struct.lines)) {
         out.push(...parseSpeechSegments(this.struct.lines.join('')))
         this.struct = null
+        this.pushPause(out)
       }
       return
     }
     const open = fenceOpenInfo(line)
     if (open) {
-      this.flushProse(out)
+      if (this.flushProse(out)) this.pushPause(out)
       this.struct = { kind: 'code', open, lines: [line] }
       return
     }
     if (mathOpen(line)) {
-      this.flushProse(out)
+      if (this.flushProse(out)) this.pushPause(out)
       this.struct = { kind: 'math', lines: [line] }
       if (mathClosed(this.struct.lines)) {
         out.push(...parseSpeechSegments(this.struct.lines.join('')))
         this.struct = null
+        this.pushPause(out)
       }
       return
     }
     if (line.trim() === '') {
-      this.flushProse(out)
+      if (this.flushProse(out)) this.pushPause(out)
       return
     }
     this.prose += line
@@ -298,12 +338,14 @@ export class BlockRouter {
     }
   }
 
-  private flushProse(out: SpeechSegment[]): void {
+  /** 冲刷累积正文；返回是否真的产出了内容（供调用方决定要不要补停顿）。 */
+  private flushProse(out: SpeechSegment[]): boolean {
     if (!this.prose.trim()) {
       this.prose = ''
-      return
+      return false
     }
     out.push(...parseSpeechSegments(this.prose))
     this.prose = ''
+    return true
   }
 }

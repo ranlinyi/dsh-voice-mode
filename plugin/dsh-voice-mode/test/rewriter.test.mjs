@@ -22,7 +22,7 @@ await build({
 })
 const {
   SpeechRewriter, extractNumbers, verifyNumbers, parseSpeechResponse, contextHash,
-  withinLengthLimit, contextEchoRatio, sentenceEchoRatio, prefixEcho,
+  withinLengthLimit, contextEchoRatio, sentenceEchoRatio, prefixEcho, parseGuardAllow,
 } = await import(pathToFileURL(out).href)
 
 let passed = 0
@@ -206,6 +206,50 @@ await t('正常读法不被复述守卫误杀', async () => {
   const res = await r.rewrite({ kind: 'inline-math', text: 'O(n^2)', meta: { sentence } })
   assert.ok(res, '正常读法应被采用')
   assert.equal(res.text, '大 O，n 的平方')
+})
+
+await t('parseGuardAllow：字面/正则/seg: 前缀，非法行报错', () => {
+  const g = parseGuardAllow('# 注释\n大 O\n/^大 Omega/\nseg:/^O\\(/\n\n/[/')
+  assert.equal(g.speech.length, 2)
+  assert.equal(g.segment.length, 1)
+  assert.equal(g.errors.length, 1)
+  assert.equal(g.speech[0].test('大 O，n'), true)
+  assert.equal(g.speech[1].test('大 Omega，n'), true)
+  assert.equal(g.segment[0].test('O(n)'), true)
+})
+
+await t('guardMode=off：跳过全部守卫，直接采用模型输出', async () => {
+  const sentence = '平均/最坏 O(n^2)，最好 O(n)。'
+  const echo = '平均/最坏 O(n 平方)，最好 O(n)。'
+  const r = new SpeechRewriter({
+    baseUrl: 'https://x.test/v1', apiKey: '', model: 'm', guardMode: 'off',
+    fetchImpl: okFetch(J({ speech: echo })),
+  })
+  const res = await r.rewrite({ kind: 'inline-math', text: 'O(n)', meta: { sentence } })
+  assert.ok(res, '守卫全关时应采用回显输出')
+  assert.equal(res.text, echo)
+})
+
+await t('guardMode=lenient：同样的回显被放行（阈值放到 0.9）', async () => {
+  const sentence = '平均/最坏 O(n^2)，最好 O(n)。'
+  const echo = '平均/最坏 O(n 平方)，最好 O(n)。'
+  const r = new SpeechRewriter({ baseUrl: 'https://x.test/v1', apiKey: '', model: 'm', guardMode: 'lenient', fetchImpl: okFetch(J({ speech: echo })) })
+  assert.ok(await r.rewrite({ kind: 'inline-math', text: 'O(n)', meta: { sentence } }), 'lenient 下应放行')
+})
+
+await t('guardMode=strict：正常读法也可能被拦（阈值更严）', async () => {
+  const sentence = '平均/最坏 O(n^2)，最好 O(n)。'
+  const r = new SpeechRewriter({ baseUrl: 'https://x.test/v1', apiKey: '', model: 'm', guardMode: 'strict', fetchImpl: okFetch(J({ speech: '平均/最坏 O(n 平方)' })) })
+  assert.equal(await r.rewrite({ kind: 'inline-math', text: 'O(n)', meta: { sentence } }), null)
+})
+
+await t('自定义放行规则：命中改写稿 / seg 命中原始片段，都跳过守卫', async () => {
+  const sentence = '平均/最坏 O(n^2)，最好 O(n)。'
+  const echo = '平均/最坏 O(n 平方)，最好 O(n)。'
+  const bySpeech = new SpeechRewriter({ baseUrl: 'https://x.test/v1', apiKey: '', model: 'm', guardAllow: parseGuardAllow('/平均/'), fetchImpl: okFetch(J({ speech: echo })) })
+  assert.ok(await bySpeech.rewrite({ kind: 'inline-math', text: 'O(n)', meta: { sentence } }), 'speech 放行规则应生效')
+  const bySegment = new SpeechRewriter({ baseUrl: 'https://x.test/v1', apiKey: '', model: 'm', guardAllow: parseGuardAllow('seg:/^O\\(/'), fetchImpl: okFetch(J({ speech: echo })) })
+  assert.ok(await bySegment.rewrite({ kind: 'inline-math', text: 'O(n)', meta: { sentence } }), 'seg 放行规则应生效')
 })
 
 await t('端点不认 response_format（400）：去掉后重试一次', async () => {

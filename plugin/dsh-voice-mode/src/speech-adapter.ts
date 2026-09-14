@@ -32,12 +32,18 @@ export interface SpeechAdapterConfig {
   pronunciation?: readonly PronunciationFix[]
   /** 传给改写模型的前文字符**上限**（0 = 不给前文；未设 = 800）。实际长度按片段动态伸缩。 */
   contextChars?: number
+  /** 段落之间的停顿毫秒（0 = 关；未设 = 350）。标题之后用 1.6 倍。 */
+  blockPauseMs?: number
 }
 
 export interface SpeechAdapterOptions {
   config: () => SpeechAdapterConfig
-  onSentence: (sentence: string) => void
+  /** pauseBeforeMs：本句起播前应插入的静音毫秒（段落/标题边界；0/未给 = 无缝）。 */
+  onSentence: (sentence: string, pauseBeforeMs?: number) => void
 }
+
+/** 段落停顿默认值（毫秒）；标题之后按 1.6 倍。 */
+const DEFAULT_BLOCK_PAUSE_MS = 350
 
 /** 前文上限默认值（字符）：动态预算不会超过它。 */
 const DEFAULT_CONTEXT_CAP = 800
@@ -99,6 +105,8 @@ export class SpeechAdapter {
   private recent: string[] = []
   /** 本回合已确认的符号含义。 */
   private readonly symbols = new Map<string, string>()
+  /** 待兑现的停顿：下一个成句起播前插入（段落/标题边界）。 */
+  private pendingPauseMs = 0
 
   constructor(private readonly opts: SpeechAdapterOptions) {
     // 用 getter 实时读取替代表：设置改动即时生效，且字段初始化期不触碰 this.opts。
@@ -121,7 +129,7 @@ export class SpeechAdapter {
       for (const seg of this.router.flush()) this.schedule(seg)
     }
     this.run(() => {
-      for (const s of this.segmenter.flush()) this.opts.onSentence(s)
+      for (const s of this.segmenter.flush()) this.opts.onSentence(s, this.takePause())
     })
   }
 
@@ -151,6 +159,17 @@ export class SpeechAdapter {
   private async handle(seg: SpeechSegment): Promise<void> {
     const cfg = this.opts.config()
     switch (seg.kind) {
+      case 'pause': {
+        // 先冲刷尚未成句的累积（标题通常没有终止标点，否则会和正文并成一句，
+        // 边界直接消失）；停顿再挂到下一句。
+        for (const s of this.segmenter.flush()) this.opts.onSentence(s)
+        const base = cfg.blockPauseMs === undefined ? DEFAULT_BLOCK_PAUSE_MS : cfg.blockPauseMs
+        if (base > 0) {
+          const factor = seg.meta && seg.meta.pauseLevel === 'heading' ? 1.6 : 1
+          this.pendingPauseMs = Math.max(this.pendingPauseMs, Math.round(base * factor))
+        }
+        return
+      }
       case 'prose':
         this.rememberProse(seg.text)
         this.emit(seg.text)
@@ -206,7 +225,14 @@ export class SpeechAdapter {
 
   private emit(text: string): void {
     if (!text || !text.trim()) return
-    for (const s of this.segmenter.feed(text)) this.opts.onSentence(s)
+    // 停顿只兑现给"这一段产生的第一句"：段落正文可能被分成多句，句间仍保持无缝。
+    for (const s of this.segmenter.feed(text)) this.opts.onSentence(s, this.takePause())
+  }
+
+  private takePause(): number {
+    const ms = this.pendingPauseMs
+    this.pendingPauseMs = 0
+    return ms
   }
 
   /** 记入前文（只收正文；超上限时丢最旧的）。 */

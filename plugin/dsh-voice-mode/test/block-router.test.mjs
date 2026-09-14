@@ -25,7 +25,8 @@ const { parseSpeechSegments, BlockRouter } = await import(pathToFileURL(out).hre
 
 let passed = 0
 const t = (name, fn) => { fn(); passed++; console.log('  ✓ ' + name) }
-const kinds = (segs) => segs.map((s) => s.kind)
+// 停顿标记（kind='pause'）是朗读节奏用的，不参与内容类型断言；单独测。
+const kinds = (segs) => segs.filter((s) => s.kind !== 'pause').map((s) => s.kind)
 const allText = (segs) => segs.map((s) => s.text).join('')
 
 console.log('parseSpeechSegments')
@@ -118,6 +119,22 @@ t('转义 \\$ 保留为字面文字', () => {
 t('成对未转义 $ 被识别为行内公式（预期行为，靠提示词转义解决）', () => {
   const segs = parseSpeechSegments('价格 $3，那本 $10。')
   assert.ok(kinds(segs).includes('inline-math'))
+})
+
+t('停顿标记：块之间插 pause，标题之后是 heading 级', () => {
+  const segs = parseSpeechSegments('# 标题\n\n正文一。\n\n正文二。\n')
+  const pauses = segs.filter((s) => s.kind === 'pause')
+  assert.ok(pauses.length >= 2, JSON.stringify(segs.map((s) => s.kind)))
+  assert.equal(pauses[0].meta.pauseLevel, 'heading')
+  assert.ok(pauses.some((p) => p.meta.pauseLevel === 'block'))
+  assert.ok(pauses.every((p) => p.text === ''))
+})
+
+t('流式：空行冲刷时发出停顿标记', () => {
+  const r = new BlockRouter()
+  const k = r.feed('第一段。\n\n').map((s) => s.kind)
+  assert.ok(k.includes('pause'), JSON.stringify(k))
+  assert.ok(k.includes('prose'), JSON.stringify(k))
 })
 
 console.log('BlockRouter 流式')

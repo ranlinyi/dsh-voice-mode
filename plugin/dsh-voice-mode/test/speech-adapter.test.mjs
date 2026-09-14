@@ -174,6 +174,41 @@ await t('整句原文：行内公式带上所在整句（消歧用）', async ()
   assert.ok(meta.sentence.includes('是一个映射'), meta.sentence)
 })
 
+await t('段落/标题停顿：标题单独成句，停顿挂到下一句', async () => {
+  const pairs = []
+  const adapter = new SpeechAdapter({
+    config: () => ({ enabled: true, mathMode: 'rules', rewriter: null }),
+    onSentence: (s, pause) => pairs.push([s, pause || 0]),
+  })
+  adapter.feed('# 标题\n\n第一段。\n\n第二段。\n')
+  adapter.flush()
+  await adapter.whenIdle()
+  const sentences = pairs.map((p) => p[0])
+  // 关键：标题不再和正文并成一句
+  assert.ok(sentences.includes('标题'), JSON.stringify(pairs))
+  assert.ok(sentences.includes('第一段。'), JSON.stringify(pairs))
+  assert.ok(sentences.includes('第二段。'), JSON.stringify(pairs))
+  const title = pairs.find((p) => p[0] === '标题')
+  const first = pairs.find((p) => p[0] === '第一段。')
+  const second = pairs.find((p) => p[0] === '第二段。')
+  assert.equal(title[1], 0)
+  assert.ok(first[1] >= 500, JSON.stringify(pairs))                       // 标题后 350*1.6
+  assert.ok(second[1] >= 300 && second[1] < 500, JSON.stringify(pairs))   // 段落间 350
+})
+
+await t('blockPauseMs=0：停顿关闭，但标题仍单独成句', async () => {
+  const pairs = []
+  const adapter = new SpeechAdapter({
+    config: () => ({ enabled: true, mathMode: 'rules', rewriter: null, blockPauseMs: 0 }),
+    onSentence: (s, pause) => pairs.push([s, pause || 0]),
+  })
+  adapter.feed('# 标题\n\n正文。\n')
+  adapter.flush()
+  await adapter.whenIdle()
+  assert.ok(pairs.some((p) => p[0] === '标题'), JSON.stringify(pairs))
+  assert.ok(pairs.every((p) => p[1] === 0), JSON.stringify(pairs))
+})
+
 await t('读音替代表：透传到分句器（只影响朗读文本）', async () => {
   const seen = await run(
     { enabled: true, mathMode: 'rules', rewriter: null, pronunciation: [{ term: '最速降线', spoken: '最速酱线' }] },
