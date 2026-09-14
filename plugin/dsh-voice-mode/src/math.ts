@@ -52,6 +52,41 @@ const ESCAPED: Record<string, string> = {
   '\\,': '', '\\;': '', '\\!': '', '\\:': '',
 }
 
+/** 元素符号 → 中文名（\ce 化学式朗读用；未收录的符号按原字母念出）。 */
+const CHEM_ELEMENTS: Record<string, string> = {
+  H: '氢', He: '氦', Li: '锂', Be: '铍', B: '硼', C: '碳', N: '氮', O: '氧', F: '氟', Ne: '氖',
+  Na: '钠', Mg: '镁', Al: '铝', Si: '硅', P: '磷', S: '硫', Cl: '氯', Ar: '氩', K: '钾', Ca: '钙',
+  Sc: '钪', Ti: '钛', V: '钒', Cr: '铬', Mn: '锰', Fe: '铁', Co: '钴', Ni: '镍', Cu: '铜', Zn: '锌',
+  Ga: '镓', Ge: '锗', As: '砷', Se: '硒', Br: '溴', Kr: '氪', Rb: '铷', Sr: '锶', Y: '钇', Zr: '锆',
+  Nb: '铌', Mo: '钼', Tc: '锝', Ru: '钌', Rh: '铑', Pd: '钯', Ag: '银', Cd: '镉', In: '铟', Sn: '锡',
+  Sb: '锑', Te: '碲', I: '碘', Xe: '氙', Cs: '铯', Ba: '钡', La: '镧', Ce: '铈', Pr: '镨', Nd: '钕',
+  Pm: '钷', Sm: '钐', Eu: '铕', Gd: '钆', Tb: '铽', Dy: '镝', Ho: '钬', Er: '铒', Tm: '铥', Yb: '镱',
+  Lu: '镥', Hf: '铪', Ta: '钽', W: '钨', Re: '铼', Os: '锇', Ir: '铱', Pt: '铂', Au: '金', Hg: '汞',
+  Tl: '铊', Pb: '铅', Bi: '铋', Po: '钋', At: '砹', Rn: '氡', Fr: '钫', Ra: '镭', Ac: '锕', Th: '钍',
+  Pa: '镤', U: '铀', Np: '镎', Pu: '钚', Am: '镅', Cm: '锔',
+}
+
+/** 物质状态记号（\ce 里的 (aq)/(s)/(l)/(g)）。 */
+const CHEM_STATES: Record<string, string> = {
+  aq: '水溶液', s: '固态', l: '液态', g: '气态', v: '气态',
+}
+
+/** 反应记号 → 中文（长记号在前，避免 <-> 被 <- 抢先匹配）。 */
+const CHEM_ARROWS: Array<[string, string]> = [
+  ['<=>>', '可逆生成'], ['<<=>', '可逆生成'], ['<=>', '可逆生成'], ['<->', '可逆生成'],
+  ['->', '生成'], ['<-', '生成'], ['⇌', '可逆生成'], ['→', '生成'], ['←', '生成'],
+]
+
+/** 物理单位（\pu 朗读用）。 */
+const PU_UNITS: Record<string, string> = {
+  kJ: '千焦', J: '焦', mol: '摩尔', mmol: '毫摩尔', g: '克', kg: '千克', mg: '毫克',
+  L: '升', mL: '毫升', s: '秒', ms: '毫秒', min: '分钟', h: '小时', K: '开尔文',
+  Pa: '帕', kPa: '千帕', MPa: '兆帕', atm: '标准大气压', M: '摩尔每升',
+  nm: '纳米', µm: '微米', mm: '毫米', cm: '厘米', km: '千米', m: '米',
+  W: '瓦', kW: '千瓦', V: '伏', mV: '毫伏', A: '安', mA: '毫安', Hz: '赫兹',
+  N: '牛', C: '库仑', '°C': '摄氏度', Å: '埃',
+}
+
 function skipWs(s: string, i: number): number {
   let j = i
   while (j < s.length && /\s/.test(s[j])) j++
@@ -106,6 +141,213 @@ function joinParts(parts: string[]): string {
  * 复杂度表达式内部：log 直接读英文（不读「对数」），给隐式乘法补「乘」，
  * 并去掉成对括号的读法——O(n log n) 读「大 O，n 乘 log n」而不是「左括号…右括号」。
  */
+/** 离子电荷：把 "3+" / "2-" / "+" / "-" 读成「正 3 价 / 负 2 价 / 正 1 价」。 */
+function chargeWord(body: string): string {
+  const digits = /[0-9]+/.exec(body)?.[0] ?? '1'
+  const sign = body.includes('-') ? '负' : '正'
+  return sign + ' ' + digits + ' 价'
+}
+
+/**
+ * 化学式（\ce{...}）朗读：元素读中文名，计数/电荷/状态/反应记号读中文。
+ * 不追求命名化合物（那属于语义，交给 model 模式），只保证「不逐字母念、不丢内容」。
+ */
+function renderChem(src: string): string {
+  const s = src.replace(/\s+/g, ' ').trim()
+  const parts: string[] = []
+  let i = 0
+  while (i < s.length) {
+    const c = s[i]
+    if (c === ' ') {
+      i++
+      continue
+    }
+    const arrow = CHEM_ARROWS.find(([token]) => s.startsWith(token, i))
+    if (arrow) {
+      parts.push(arrow[1])
+      i += arrow[0].length
+      continue
+    }
+    const state = /^\((aq|s|l|g|v)\)/.exec(s.slice(i))
+    if (state) {
+      parts.push(CHEM_STATES[state[1]] ?? '')
+      i += state[0].length
+      continue
+    }
+    if (c === '^') {
+      let j = i + 1
+      let body = ''
+      if (s[j] === '{') {
+        const a = readArg(s, j)
+        body = a.text
+        j = a.next
+      } else {
+        const m = /^[0-9+\-]+/.exec(s.slice(j))
+        body = m ? m[0] : ''
+        j += body.length
+      }
+      if (/[+\-]/.test(body)) {
+        parts.push(chargeWord(body))
+        i = j
+        continue
+      }
+      parts.push('气体')
+      i++
+      continue
+    }
+    if (c === 'v' && !/[a-zA-Z]/.test(s[i + 1] ?? '')) {
+      parts.push('沉淀')
+      i++
+      continue
+    }
+    if (c === '_' || c === '{') {
+      const a = readArg(s, c === '_' ? i + 1 : i)
+      parts.push(renderChem(a.text))
+      i = a.next
+      continue
+    }
+    if (c === '}') {
+      i++
+      continue
+    }
+    if (c === '\\') {
+      const m = /^\\([a-zA-Z]+)/.exec(s.slice(i))
+      if (m) {
+        const n = m[1]
+        if (n === 'text' || n === 'mathrm' || n === 'mathit' || n === 'mathbf' || n === 'mathsf') {
+          const a = readArg(s, i + m[0].length)
+          parts.push(a.text.trim())
+          i = a.next
+          continue
+        }
+        if (n === 'to' || n === 'rightarrow' || n === 'longrightarrow' || n === 'leftarrow' || n === 'longleftarrow') {
+          parts.push('生成')
+        } else if (n === 'rightleftharpoons' || n === 'leftrightharpoons') {
+          parts.push('可逆生成')
+        } else {
+          parts.push(OPERATORS[n] ?? n)
+        }
+        i += m[0].length
+        continue
+      }
+      i++
+      continue
+    }
+    const el = /^[A-Z][a-z]?/.exec(s.slice(i))
+    if (el) {
+      parts.push(CHEM_ELEMENTS[el[0]] ?? el[0])
+      i += el[0].length
+      continue
+    }
+    if (c === '+') {
+      parts.push('加')
+      i++
+      continue
+    }
+    if (c === '=') {
+      parts.push('等于')
+      i++
+      continue
+    }
+    if (c === '.') {
+      parts.push('点')
+      i++
+      continue
+    }
+    if (c === '*') {
+      parts.push('乘')
+      i++
+      continue
+    }
+    if (c === '~') {
+      parts.push('约')
+      i++
+      continue
+    }
+    if (c === ',' || c === ';') {
+      parts.push('，')
+      i++
+      continue
+    }
+    const num = /^[0-9]+/.exec(s.slice(i))
+    if (num) {
+      parts.push(num[0])
+      i += num[0].length
+      continue
+    }
+    parts.push(c)
+    i++
+  }
+  return joinParts(parts)
+}
+
+/** 物理单位（\pu{...}）朗读：数值原样、单位读中文、"/" 读「每」、^ 读「的 N 次方」。 */
+function renderUnit(src: string): string {
+  const s = src
+  const parts: string[] = []
+  const unitKeys = Object.keys(PU_UNITS).sort((a, b) => b.length - a.length)
+  let i = 0
+  while (i < s.length) {
+    const c = s[i]
+    if (/\s/.test(c)) {
+      i++
+      continue
+    }
+    const num = /^[+\-]?[0-9]+(?:\.[0-9]+)?(?:[eE][+\-]?[0-9]+)?/.exec(s.slice(i))
+    if (num) {
+      parts.push(num[0])
+      i += num[0].length
+      continue
+    }
+    if (c === '\\') {
+      const m = /^\\([a-zA-Z]+)/.exec(s.slice(i))
+      if (m) {
+        parts.push(OPERATORS[m[1]] ?? m[1])
+        i += m[0].length
+        continue
+      }
+      i++
+      continue
+    }
+    if (c === '/') {
+      parts.push('每')
+      i++
+      continue
+    }
+    if (c === '^') {
+      const a = readArg(s, i + 1)
+      parts.push('的 ' + renderUnit(a.text) + ' 次方')
+      i = a.next
+      continue
+    }
+    if (c === '*') {
+      parts.push('乘')
+      i++
+      continue
+    }
+    if (c === '.') {
+      parts.push('点')
+      i++
+      continue
+    }
+    const unit = /^[A-Za-zµΩÅ°]+/.exec(s.slice(i))
+    if (unit) {
+      const hit = unitKeys.find((k) => s.startsWith(k, i))
+      if (hit) {
+        parts.push(PU_UNITS[hit])
+        i += hit.length
+      } else {
+        parts.push(unit[0])
+        i += unit[0].length
+      }
+      continue
+    }
+    parts.push(c)
+    i++
+  }
+  return joinParts(parts)
+}
+
 function renderComplexity(tex: string): string {
   const s = tex
     .replace(/\\(log|lg|ln)\b/g, ' $1 ')
@@ -170,6 +412,20 @@ function render(s: string): string {
           flush()
           const a = readArg(s, j)
           parts.push(a.text.trim())
+          i = a.next
+          continue
+        }
+        if (name === 'ce') {
+          flush()
+          const a = readArg(s, j)
+          parts.push(renderChem(a.text))
+          i = a.next
+          continue
+        }
+        if (name === 'pu') {
+          flush()
+          const a = readArg(s, j)
+          parts.push(renderUnit(a.text))
           i = a.next
           continue
         }

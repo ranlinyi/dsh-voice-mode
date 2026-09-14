@@ -96,5 +96,24 @@ t('排版性空白命令被忽略（少念出感叹号/反斜杠）', () => {
   assert.ok(!out.includes('lesssim'), out)
 })
 
+t('化学式 \\ce：元素读中文名，计数/状态/反应记号读中文', () => {
+  assert.equal(latexToSpeech('\\ce{H2O}'), '氢 2 氧')
+  assert.equal(latexToSpeech('\\ce{H2SO4}'), '氢 2 硫 氧 4')
+  assert.equal(latexToSpeech('\\ce{2H2 + O2 -> 2H2O}'), '2 氢 2 加 氧 2 生成 2 氢 2 氧')
+  assert.equal(latexToSpeech('\\ce{NaCl(aq)}'), '钠 氯 水溶液')
+  assert.equal(latexToSpeech('\\ce{Fe^{3+}}'), '铁 正 3 价')
+  // 不再逐字母念命令与元素符号
+  const out = latexToSpeech('\\ce{CO2}')
+  assert.equal(out, '碳 氧 2')
+})
+
+t('物理单位 \\pu：数值原样，单位读中文', () => {
+  const s = latexToSpeech('\\pu{123 kJ/mol}')
+  assert.ok(s.includes('123'), s)
+  assert.ok(s.includes('千焦'), s)
+  assert.ok(s.includes('摩尔'), s)
+  assert.ok(s.includes('每'), s)
+})
+
 console.log('\nmath：' + passed + ' 项通过')
 rmSync(tmp, { recursive: true, force: true })
