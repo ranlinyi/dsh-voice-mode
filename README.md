@@ -6,6 +6,9 @@
 
 <p align="center">DeepSeek Harness 全双工语音插件 —— 实时识别 · 按句朗读 · 开口即打断</p>
 
+> **这是 fork：`dsh-voice-mode-adaptation`。** 在上游基础上新增「语音改编站」——让公式、表格、代码被**正确口述**，屏幕 Markdown 完整保留。
+> 安装与配置请看 **[语音改编站 · Quick Start](QUICKSTART-adaptation.md)**。
+
 <p align="center">
   <a href="https://github.com/topics/dsh-plugin"><img src="https://img.shields.io/badge/dsh--plugin-voice-brightgreen?style=flat-square" alt="dsh-plugin voice"></a>
   <a href="https://www.npmjs.com/package/dsh-voice-mode"><img src="https://img.shields.io/npm/v/dsh-voice-mode?style=flat-square" alt="npm version"></a>
