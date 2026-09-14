@@ -68,6 +68,19 @@ t('行内公式与中文紧贴时能精确切分', () => {
   assert.equal(segs[1].text, 'a_n')
   assert.equal(segs[2].text, ' 为数列。')
 })
+t('行内公式带上所在整句原文（含公式后面的解释词，供消歧）', () => {
+  const segs = parseSpeechSegments('设 $f: A \\to B$ 是一个映射。')
+  const m = segs.find((s) => s.kind === 'inline-math')
+  assert.ok(m.meta && typeof m.meta.sentence === 'string', 'inline-math 应带 meta.sentence')
+  assert.ok(m.meta.sentence.includes('是一个映射'), m.meta.sentence)
+  assert.ok(m.meta.sentence.includes('A \\to B'), m.meta.sentence)
+})
+
+t('展示公式/代码/表格不带 sentence（它们的语境来自前文）', () => {
+  const segs = parseSpeechSegments('$$\na_n + 1\n$$\n')
+  const d = segs.find((s) => s.kind === 'display-math')
+  assert.equal(d.meta, undefined)
+})
 
 t('\\[ x^2 \\] 与 \\( y \\) 被当作普通文字（与 DSH 渲染器一致）', () => {
   const segs = parseSpeechSegments('\\[ x^2 \\] 与 \\( y \\)')

@@ -149,6 +149,7 @@ await t('请求体：JSON 信封 + response_format + 禁用思考，上下文只
   await r.rewrite({
     kind: 'inline-math',
     text: 'v^2',
+    meta: { sentence: '设 f: A → B 是一个映射。' },
     context: { before: '前文内容', symbols: [{ sym: 'v', meaning: '速度' }] },
   })
   assert.equal(captured.thinking.type, 'disabled')
@@ -157,8 +158,28 @@ await t('请求体：JSON 信封 + response_format + 禁用思考，上下文只
   assert.ok(user.task.includes('行内公式'), user.task)
   assert.equal(user.segment.type, 'inline-math')
   assert.equal(user.segment.text, 'v^2')
+  assert.equal(user.segment.sentence, '设 f: A → B 是一个映射。')
   assert.equal(user.context.before, '前文内容')
   assert.deepEqual(user.context.symbols, [{ sym: 'v', meaning: '速度' }])
+})
+
+await t('缓存键含整句原文：同一公式在不同句子下不复用讲稿', async () => {
+  let calls = 0
+  const f = async () => {
+    calls++
+    return { ok: true, json: async () => ({ choices: [{ message: { content: J({ speech: 'v 的 2 次方' }) } }] }) }
+  }
+  const r = new SpeechRewriter({ baseUrl: 'https://x.test/v1', apiKey: '', model: 'm', fetchImpl: f })
+  await r.rewrite({ kind: 'inline-math', text: 'v^2', meta: { sentence: '甲：这里的 v 平方。' } })
+  await r.rewrite({ kind: 'inline-math', text: 'v^2', meta: { sentence: '乙：那里的 v 平方。' } })
+  await r.rewrite({ kind: 'inline-math', text: 'v^2', meta: { sentence: '甲：这里的 v 平方。' } })
+  assert.equal(calls, 2)
+})
+
+await t('整句原文也参与回显守卫（照抄整句被丢弃）', async () => {
+  const sentence = '设 f 是从集合 A 到集合 B 的一个映射，并且对任意的 x 都有 f 在 x 处的值属于 B。'
+  const r = mk(J({ speech: sentence }))
+  assert.equal(await r.rewrite({ kind: 'inline-math', text: 'f: A \\to B', meta: { sentence } }), null)
 })
 
 await t('端点不认 response_format（400）：去掉后重试一次', async () => {

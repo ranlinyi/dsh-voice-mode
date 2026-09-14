@@ -1323,7 +1323,8 @@ var zh = {
   descRewriteCache: "\u76F8\u540C\u7247\u6BB5\u590D\u7528\u8BB2\u7A3F\uFF08\u9ED8\u8BA4\u5F00\uFF0C\u51CF\u5C11\u91CD\u590D\u8BF7\u6C42\uFF09\u3002",
   descRewriteDisableThinking: "\u5173\u95ED\u6539\u5199\u6A21\u578B\u7684\u601D\u8003\u94FE\uFF08\u9ED8\u8BA4\u5F00\uFF09\uFF1AGLM-4.5 \u7B49\u601D\u8003\u578B\u6A21\u578B\u4E0D\u5173\u601D\u8003\u4F1A\u53EA\u8F93\u51FA\u63A8\u7406\u3001\u6B63\u6587\u4E3A\u7A7A\uFF0C\u8FEB\u4F7F\u6539\u5199\u56DE\u9000\uFF1B\u4EC5\u7AEF\u70B9\u652F\u6301 thinking \u53C2\u6570\u65F6\u6709\u6548\u3002",
   descRewriteContextChars: "\u4F20\u7ED9\u6539\u5199\u6A21\u578B\u7684\u524D\u6587\u5B57\u7B26\u4E0A\u9650\uFF08\u9ED8\u8BA4 800\uFF09\uFF1A\u5B9E\u9645\u957F\u5EA6\u6309\u7247\u6BB5\u52A8\u6001\u4F38\u7F29\u2014\u2014\u77ED\u516C\u5F0F\u5C11\u7ED9\u524D\u6587\uFF0C\u5927\u4EE3\u7801\u5757/\u5927\u8868\u683C\u591A\u7ED9\uFF0C\u5E76\u603B\u662F\u4ECE\u6574\u53E5\u5F00\u59CB\u30020 = \u4E0D\u7ED9\u524D\u6587\uFF0C\u53EA\u4FDD\u7559\u5DF2\u786E\u8BA4\u7684\u7B26\u53F7\u8868\u3002",
-  descPronunciationFixes: "\u591A\u97F3\u5B57\u8BFB\u97F3\u66FF\u4EE3\u8868\uFF08\u9ED8\u8BA4\u7A7A = \u63D2\u4EF6\u4E0D\u6539\u4EFB\u4F55\u8BCD\u3001\u4E5F\u4E0D\u7EA0\u97F3\uFF09\uFF1A\u6BCF\u884C\u300C\u539F\u8BCD => \u540C\u97F3\u66FF\u8EAB\u300D\uFF0C\u66FF\u8EAB\u5FC5\u987B\u4E0E\u539F\u8BCD\u7B49\u5B57\u6570\uFF1B\u53EA\u7EA0\u6B63\u8BFB\u97F3\uFF0C\u4E0D\u5141\u8BB8\u589E\u5220\u5B57\u6216\u6539\u6210\u540C\u4E49\u8BCD\uFF0C\u683C\u5F0F/\u5B57\u6570\u4E0D\u7B26\u7684\u884C\u4F1A\u88AB\u5FFD\u7565\u5E76\u56DE\u62A5\u3002",
+  descPronunciationEnabled: "\u542F\u7528\u591A\u97F3\u5B57\u7528\u6237\u8BCD\u8868\uFF08\u9ED8\u8BA4\u5F00\uFF09\u3002\u5173 = \u5B8C\u5168\u4E0D\u6539\u4EFB\u4F55\u6717\u8BFB\u6587\u672C\uFF1B\u5C4F\u5E55\u663E\u793A\u672C\u6765\u5C31\u4E0D\u53D7\u5F71\u54CD\u3002",
+  descPronunciationFixes: "\u591A\u97F3\u5B57\u7528\u6237\u8BCD\u8868\uFF08\u53EF\u589E\u5220/\u6E05\u7A7A\uFF09\uFF1A\u6BCF\u884C\u300C\u539F\u8BCD => \u540C\u97F3\u66FF\u8EAB\u300D\uFF0C\u66FF\u8EAB\u5FC5\u987B\u4E0E\u539F\u8BCD\u7B49\u5B57\u6570\uFF1B\u53EA\u7EA0\u6B63\u8BFB\u97F3\uFF0C\u4E0D\u5141\u8BB8\u589E\u5220\u5B57\u6216\u6539\u6210\u540C\u4E49\u8BCD\uFF0C\u683C\u5F0F/\u5B57\u6570\u4E0D\u7B26\u7684\u884C\u4F1A\u88AB\u5FFD\u7565\u5E76\u56DE\u62A5\u3002\u539F\u8BCD\u4E5F\u53EF\u5199\u6210\u6B63\u5219 /pattern/flags\uFF08\u4F8B\uFF1A/\u7B2C\\s*(\\d+)\\s*\u884C/ => \u7B2C$1\u822A\uFF0C\u7528\u4E8E\u300C\u7B2C N \u884C\u300D\u8FD9\u7C7B\u52A8\u6001\u4E0A\u4E0B\u6587\uFF1B\u6B64\u65F6\u8DF3\u8FC7\u7B49\u5B57\u6570\u6821\u9A8C\uFF0C\u6B63\u5219\u7531\u4F60\u81EA\u8D1F\u98CE\u9669\uFF09\u3002\u9ED8\u8BA4\u503C\u662F\u4E00\u4EFD\u300C\u884C(h\xE1ng)\u300D\u540C\u97F3\u8BCD\u8868\uFF0C\u4E0D\u662F\u9690\u85CF\u5185\u7F6E\uFF0C\u968F\u65F6\u53EF\u6539\u3002",
   descMathMode: "\u6570\u5B66\u6717\u8BFB\u6A21\u5F0F\uFF1A\u786E\u5B9A\u6027\u89C4\u5219\u96F6\u5BB9\u9519\uFF08\u9ED8\u8BA4\uFF09/ \u4EA4\u7ED9\u6539\u5199\u6A21\u578B / \u539F\u6837\u5FF5\u51FA\u3002",
   mathModeRules: "\u786E\u5B9A\u6027\u89C4\u5219",
   mathModeModel: "\u4EA4\u7ED9\u6A21\u578B",
@@ -1481,7 +1482,8 @@ var en = {
   descRewriteCache: "Reuse the script for identical fragments (default on; fewer requests).",
   descRewriteDisableThinking: "Disable the rewrite model thinking chain (default on): thinking models like GLM-4.5 otherwise emit only reasoning with empty content, forcing a fallback. Only effective when the endpoint supports the thinking parameter.",
   descRewriteContextChars: "Upper bound of preceding prose sent to the rewrite model (default 800). The actual size scales dynamically with the segment: short formulas get little prose, large code blocks/tables get more, always starting at a sentence boundary. 0 = no prose, symbol table only.",
-  descPronunciationFixes: "Pronunciation substitution table (empty by default = the plugin never changes a word or pronunciation): one entry per line, term => same-length homophone. Only pronunciation is corrected; adding/removing characters or using a synonym is rejected and reported.",
+  descPronunciationEnabled: "Enable the user pronunciation word list (default on). Off = no spoken text is changed at all; the on-screen text is never affected.",
+  descPronunciationFixes: 'User pronunciation word list (edit or clear freely): one entry per line, term => same-length homophone. Only pronunciation is corrected; adding/removing characters or using a synonym is rejected and reported. The term may also be a regex /pattern/flags (e.g. /\u7B2C\\s*(\\d+)\\s*\u884C/ => \u7B2C$1\u822A for dynamic contexts such as row numbers); regex entries skip the length check and are used at your own risk. The default value is a "\u884C(h\xE1ng)" homophone list, not a hidden built-in.',
   descMathMode: "Math reading mode: deterministic rules (default, zero-tolerance) / let the rewrite model handle it / read verbatim.",
   mathModeRules: "Deterministic rules",
   mathModeModel: "Let the model",
@@ -1595,7 +1597,8 @@ var FIELD_LABELS = {
   rewriteCache: "\u8BB2\u7A3F\u7F13\u5B58",
   rewriteDisableThinking: "\u5173\u95ED\u601D\u8003\u94FE",
   rewriteContextChars: "\u4E0A\u4E0B\u6587\u957F\u5EA6",
-  pronunciationFixes: "\u591A\u97F3\u5B57\u66FF\u4EE3\u8868",
+  pronunciationEnabled: "\u542F\u7528\u591A\u97F3\u5B57\u8BCD\u8868",
+  pronunciationFixes: "\u591A\u97F3\u5B57\u7528\u6237\u8BCD\u8868",
   rewriteSecret: "\u5199\u5165\u5BC6\u94A5"
 };
 var setHeader = {
@@ -2630,7 +2633,8 @@ function VoiceSettingsCard({ scope }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteCache", desc: t("descRewriteCache"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "checkbox", checked: Boolean(value.rewriteCache), onChange: (e) => void scope.set("rewriteCache", e.target.checked) }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteDisableThinking", desc: t("descRewriteDisableThinking"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "checkbox", checked: Boolean(value.rewriteDisableThinking), onChange: (e) => void scope.set("rewriteDisableThinking", e.target.checked) }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteContextChars", desc: t("descRewriteContextChars"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NumberField, { score: scope, field: "rewriteContextChars", value: value.rewriteContextChars ?? 800, min: 0, max: 4e3, step: 50 }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "pronunciationFixes", desc: t("descPronunciationFixes"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextAreaField, { score: scope, field: "pronunciationFixes", value: value.pronunciationFixes ?? "", placeholder: "\u539F\u8BCD => \u540C\u97F3\u66FF\u8BCD\uFF08\u7B49\u5B57\u6570\uFF09", rows: 3 }) })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "pronunciationEnabled", desc: t("descPronunciationEnabled"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "checkbox", checked: value.pronunciationEnabled !== false, onChange: (e) => void scope.set("pronunciationEnabled", e.target.checked) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "pronunciationFixes", desc: t("descPronunciationFixes"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextAreaField, { score: scope, field: "pronunciationFixes", value: value.pronunciationFixes ?? "", placeholder: "\u8BCD => \u540C\u97F3\u66FF\u8BCD\uFF1B/\u6B63\u5219/ => \u66FF\u6362", rows: 4 }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Section, { title: t("secModel"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "modelHost", desc: t("descModelHost"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SelectField, { score: scope, field: "modelHost", value: value.modelHost ?? "", options: HOST_OPTIONS, placeholder: "https://..." }) }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: t2.term, lineHeight: "18px", padding: "4px 0 8px" }, children: t("settingsEffectiveNote") }),
@@ -2656,7 +2660,7 @@ var TELEMETRY_VIEW = [
   { stage: "first-tts-chunk", key: "telFirstChunk" },
   { stage: "first-audio-played", key: "telFirstPlayed" }
 ];
-var BUILD_TAG = "1232b30";
+var BUILD_TAG = "9df354f";
 var TELEMETRY_FLAG = "dsh-voice-mode-adaptation.telemetry";
 var telemetryEnabled = typeof localStorage !== "undefined" && localStorage.getItem(TELEMETRY_FLAG) === "1";
 console.log("[dsh-voice] build=" + BUILD_TAG);

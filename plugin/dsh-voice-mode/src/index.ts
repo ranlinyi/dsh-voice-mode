@@ -28,7 +28,7 @@ import { rm } from 'node:fs/promises'
 import { createAsrRuntime, handleAsrRequest } from './asr-host.ts'
 import { SpeechAdapter, type SpeechAdapterConfig } from './speech-adapter.ts'
 import { SpeechRewriter } from './rewriter.ts'
-import { parsePronunciationFixes, type PronunciationFix } from './segmenter.ts'
+import { DEFAULT_PRONUNCIATION_TABLE, parsePronunciationFixes, type PronunciationFix } from './segmenter.ts'
 import { EdgeTtsEngine, TtsQueue, listEdgeVoices, type TtsEngine } from './tts-queue.ts'
 import { createSherpaVitsEngine, createSherpaKokoroEngine, TTS_MODEL_REPO, kokoroModelDir, type KokoroModel } from './tts-local.ts'
 import { HOST_PRIMARY, validateModelHost } from './models.ts'
@@ -164,11 +164,14 @@ export interface VoiceSettingsValue {
   /** 传给改写模型的前文字符**上限**（0 = 不给前文；默认 800）。实际长度按片段动态伸缩。 */
   rewriteContextChars: number
   /**
-   * 多音字读音替代表：每行「原词 => 同音替身」，# 起首为注释。
-   * 默认空：插件不改任何词、也不纠音。替身必须与原词**等字数**，
+   * 多音字 / 易读错词的**用户词表**：每行「原词 => 同音替身」，# 起首为注释。
+   * 完全可见可改：默认值是插件带的一份「行(háng)」同音词表，可自行增删或清空；
+   * 是否生效由 pronunciationEnabled 决定。替身必须与原词**等字数**，
    * 只允许同音替换（历史实现「最速降线 => 最速下降线」增了音节、等于改了术语，已移除）。
    */
   pronunciationFixes: string
+  /** 是否启用上面的用户词表（默认开）。关 = 完全不改任何朗读文本。 */
+  pronunciationEnabled: boolean
   /** 数学朗读模式：rules 确定性规则（默认）/ model 交给改写模型 / verbatim 原样。 */
   mathMode: 'rules' | 'model' | 'verbatim'
 }
@@ -203,7 +206,8 @@ const VOICE_SETTINGS_DEFAULTS: VoiceSettingsValue = {
   rewriteCache: true,
   rewriteDisableThinking: true,
   rewriteContextChars: 800,
-  pronunciationFixes: '',
+  pronunciationFixes: DEFAULT_PRONUNCIATION_TABLE,
+  pronunciationEnabled: true,
   mathMode: 'rules',
 }
 
@@ -318,10 +322,15 @@ export function createVoiceSettingsSchema(defs?: Partial<VoiceSettingsValue>): z
       .max(4000)
       .default(d.rewriteContextChars)
       .description('传给改写模型的前文字符上限（默认 800；实际长度按片段动态伸缩，短片段少给、大代码块/大表格多给；0 = 不给前文，仅保留符号表）'),
+    pronunciationEnabled: z
+      .boolean()
+      .default(d.pronunciationEnabled)
+      .description('启用多音字用户词表（默认开）。关 = 完全不改任何朗读文本（屏幕本来就不受影响）'),
     pronunciationFixes: z
       .string()
       .default(d.pronunciationFixes)
-      .description('多音字读音替代表（默认空 = 不改任何词）：每行「原词 => 同音替身」，替身必须与原词等字数，只允许同音替换，不允许增删字或改成同义词'),
+      .description('多音字用户词表（可增删/清空）：每行「原词 => 同音替身」，替身必须与原词等字数，只允许同音替换，不允许增删字或改成同义词；原词也可写成正则 /pattern/flags（用于「第 N 行」这类动态上下文，此时跳过等字数校验，替换串支持 $1）。默认值是一份「行(háng)」同音词表，不代表固定内置，随时可改'),
+  
     mathMode: z
       .union([z.const('rules'), z.const('model'), z.const('verbatim')])
       .default(d.mathMode)
@@ -525,8 +534,9 @@ export function apply(ctx: Context, config: Config): void {
     if (raw === pronunciationRaw) return
     pronunciationRaw = raw
     const parsed = parsePronunciationFixes(raw)
-    pronunciation = parsed.fixes
     pronunciationErrors = parsed.errors
+    // 开关关闭时不应用任何替换；但解析错误照常回报，方便用户发现词表写法问题。
+    pronunciation = vset.pronunciationEnabled ? parsed.fixes : []
   }
   syncPronunciation()
 

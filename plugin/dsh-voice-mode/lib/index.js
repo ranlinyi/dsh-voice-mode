@@ -13169,7 +13169,7 @@ function tableData(node2) {
   for (const row of node2.children) rows.push(row.children.map(cellText));
   return rows;
 }
-function pushInline(node2, out, block) {
+function pushInline(node2, out, block, sentence) {
   switch (node2.type) {
     case "text":
       if (node2.value) out.push({ kind: "prose", text: node2.value, block });
@@ -13178,7 +13178,7 @@ function pushInline(node2, out, block) {
       out.push({ kind: "inline-code", text: node2.value, block });
       return;
     case "inlineMath":
-      out.push({ kind: "inline-math", text: node2.value, block });
+      out.push({ kind: "inline-math", text: node2.value, block, meta: sentence ? { sentence } : void 0 });
       return;
     case "image":
       if (node2.alt) out.push({ kind: "prose", text: "\u56FE\u7247\uFF1A" + node2.alt, block });
@@ -13191,7 +13191,7 @@ function pushInline(node2, out, block) {
       return;
     default:
       if (Array.isArray(node2.children)) {
-        for (const c of node2.children) pushInline(c, out, block);
+        for (const c of node2.children) pushInline(c, out, block, sentence);
       } else {
         const s = toString(node2);
         if (s) out.push({ kind: "prose", text: s, block });
@@ -13218,9 +13218,11 @@ function walkBlocks(nodes, out, ctx) {
         break;
       }
       case "paragraph":
-      case "heading":
-        pushInline(node2, out, ctx.n++);
+      case "heading": {
+        const sentence = toString(node2).replace(/\s+/g, " ").trim().slice(0, 400);
+        pushInline(node2, out, ctx.n++, sentence || void 0);
         break;
+      }
       case "list":
       case "listItem":
       case "blockquote":
@@ -13382,6 +13384,42 @@ function plainText(text5) {
 function sanitizeForTts(text5) {
   return String(text5).replace(/[*_#>`|^=+~]/g, " ").replace(/\s{2,}/g, " ").replace(/([\u3400-\u9fff])\s+(?=[\u3400-\u9fff])/g, "$1").trim();
 }
+var DEFAULT_PRONUNCIATION_TABLE = String.raw`
+# 多音字：行(háng)。注意不要写单字「行 => 航」，那会让"进行/不行"变成"进航/不航"。
+行业 => 航业
+行列 => 航列
+行内 => 航内
+行间 => 航间
+行号 => 航号
+行数 => 航数
+行距 => 航距
+行高 => 航高
+行宽 => 航宽
+行首 => 航首
+行末 => 航末
+行尾 => 航尾
+行会 => 航会
+行情 => 航情
+行家 => 航家
+银行 => 银航
+内行 => 内航
+外行 => 外航
+逐行 => 逐航
+多行 => 多航
+单行 => 单航
+跨行 => 跨航
+首行 => 首航
+末行 => 末航
+该行 => 该航
+本行 => 本航
+每行 => 每航
+几行 => 几航
+一行 => 一航
+两行 => 两航
+# 正则：带数字/量词的行号（第 3 行 / 第 12 行）
+/第\s*([0-9一二三四五六七八九十百千万]+)\s*行/ => 第$1航
+/([0-9]+\s*)行/ => $1航
+`.trim();
 var codePoints = (s) => Array.from(s);
 function parsePronunciationFixes(raw) {
   const fixes = [];
@@ -13401,6 +13439,17 @@ function parsePronunciationFixes(raw) {
       errors.push("\u7B2C " + (i + 1) + " \u884C\u539F\u8BCD\u6216\u66FF\u8EAB\u4E3A\u7A7A\uFF1A" + line);
       continue;
     }
+    const reMatch = /^\/(.+)\/([a-z]*)$/.exec(term);
+    if (reMatch) {
+      let flags = reMatch[2];
+      if (!flags.includes("g")) flags += "g";
+      try {
+        fixes.push({ term: "", spoken, re: new RegExp(reMatch[1], flags) });
+      } catch (e) {
+        errors.push("\u7B2C " + (i + 1) + " \u884C\u6B63\u5219\u4E0D\u5408\u6CD5\uFF08" + (e instanceof Error ? e.message : String(e)) + "\uFF09\uFF1A" + line);
+      }
+      continue;
+    }
     const a = codePoints(term).length;
     const b = codePoints(spoken).length;
     if (a !== b) {
@@ -13415,7 +13464,9 @@ function parsePronunciationFixes(raw) {
 function applyPronunciationFixes(text5, fixes = []) {
   if (fixes.length === 0) return String(text5);
   let out = String(text5);
-  for (const fix of fixes) out = out.split(fix.term).join(fix.spoken);
+  for (const fix of fixes) {
+    out = fix.re ? out.replace(fix.re, fix.spoken) : out.split(fix.term).join(fix.spoken);
+  }
   return out;
 }
 function splitSentences(chunk) {
@@ -13852,7 +13903,12 @@ var SpeechAdapter = class {
         return;
       case "inline-math":
         if (cfg.mathMode === "model") {
-          const r = cfg.rewriter ? await cfg.rewriter.rewrite({ kind: "inline-math", text: seg.text, context: this.context(seg.text.length) }) : null;
+          const r = cfg.rewriter ? await cfg.rewriter.rewrite({
+            kind: "inline-math",
+            text: seg.text,
+            meta: seg.meta,
+            context: this.context(seg.text.length)
+          }) : null;
           if (r && r.symbols) this.learnSymbols(r.symbols);
           this.emit(r ? r.text : latexToSpeech(seg.text));
         } else if (cfg.mathMode === "verbatim") {
@@ -13932,7 +13988,7 @@ var SpeechAdapter = class {
 };
 
 // src/rewriter.ts
-var PROMPT_VERSION = "sp4";
+var PROMPT_VERSION = "sp5";
 var KIND_INSTRUCTIONS = {
   "display-math": "\u8FD9\u662F\u72EC\u7ACB\u5C55\u793A\u7684\u6570\u5B66\u516C\u5F0F\u3002\u7528\u4E00\u4E24\u53E5\u8BDD\u8BF4\u660E\u5B83\u8868\u8FBE\u7684\u5173\u7CFB\uFF08\u67D0\u4E2A\u91CF\u7B49\u4E8E\u4EC0\u4E48\u3001\u968F\u4EC0\u4E48\u53D8\u5316\uFF09\uFF1B\u53EA\u6709\u5728\u542B\u4E49\u786E\u5B9E\u4E0D\u660E\u663E\u65F6\u624D\u7B80\u8981\u63D0\u5230\u5173\u952E\u7B26\u53F7\uFF0C\u4E0D\u8981\u9010\u4E2A\u7F57\u5217\u7B26\u53F7\u542B\u4E49\uFF0C\u4E5F\u4E0D\u8981\u5C55\u5F00\u63A8\u5BFC\u3002",
   "inline-math": "\u8FD9\u662F\u53E5\u5B50\u4E2D\u7684\u884C\u5185\u516C\u5F0F\u3002\u53EA\u628A\u5B83\u5FF5\u6210\u901A\u987A\u7684\u4E2D\u6587\u77ED\u8BED\uFF08\u4F8B\u5982\u300C\u4E8C\u5206\u4E4B\u4E00 m v \u5E73\u65B9\u300D\u300Cv \u7B49\u4E8E v \u96F6\u52A0 a t\u300D\uFF09\uFF0C\u4E0D\u8981\u5C55\u5F00\u89E3\u91CA\uFF0C\u4E0D\u8981\u8865\u5145\u5B9A\u4E49\uFF0C\u4E0D\u8981\u52A0\u63A8\u5BFC\u3002",
@@ -13944,7 +14000,7 @@ var SYSTEM_PROMPT = [
   "",
   "\u4E00\u3001\u8F93\u5165\u662F\u4E00\u4E2A JSON \u5BF9\u8C61\uFF1Atask \u662F\u672C\u6B21\u6539\u5199\u8981\u6C42\uFF1Bcontext.before \u662F\u6700\u8FD1\u5DF2\u6717\u8BFB\u7684\u6B63\u6587\uFF1B",
   "context.symbols \u662F\u5DF2\u786E\u8BA4\u7684\u7B26\u53F7\u542B\u4E49\uFF08sym \u7B26\u53F7 / meaning \u4E2D\u6587\u542B\u4E49\uFF09\uFF1B",
-  "segment \u662F\u5F85\u6539\u5199\u7247\u6BB5\uFF08type / text / \u53EF\u9009 lang\u3001rows\uFF09\u3002",
+  "segment \u662F\u5F85\u6539\u5199\u7247\u6BB5\uFF08type / text / sentence \u6240\u5728\u6574\u53E5\u539F\u6587 / \u53EF\u9009 lang\u3001rows\uFF09\u3002",
   "",
   "\u4E8C\u3001\u6700\u9AD8\u4F18\u5148\u89C4\u5219\uFF1A",
   "1. context \u53EA\u4F9B\u7406\u89E3\u8BED\u5883\uFF1A\u4E0D\u8981\u6717\u8BFB\u5B83\u3001\u4E0D\u8981\u7FFB\u8BD1\u5B83\u3001\u4E0D\u8981\u590D\u8FF0\u5B83\u3001\u4E0D\u8981\u628A\u5B83\u5199\u8FDB\u8F93\u51FA\uFF1B\u4F60\u53EA\u6539\u5199 segment\u3002",
@@ -13974,7 +14030,20 @@ var SYSTEM_PROMPT = [
   "12. \u90FD\u65E0\u6CD5\u5224\u65AD\u65F6\u8BFB\u300C\u5B57\u6BCD X\u300D\uFF08\u4F8B\u5982\u300C\u5B57\u6BCD q\u300D\uFF09\uFF0C\u4E0D\u8981\u7559\u88F8\u5B57\u6BCD\u3002",
   "13. \u7EDD\u4E0D\u80FD\u628A\u5B57\u6BCD\u8BFB\u6210\u8BA1\u91CF\u5355\u4F4D\uFF1Ag \u4E0D\u8BFB\u514B\u3001m \u4E0D\u8BFB\u7C73\u3001s \u4E0D\u8BFB\u79D2\u3001t \u4E0D\u8BFB\u5428\u3002",
   "14. \u7B97\u5F0F\u8BFB\u6CD5\uFF1A\u5206\u6570\u8BFB\u300C\u4E8C\u5206\u4E4B\u4E00\u300D\uFF1Ba \u7684\u5E73\u65B9\u3001a \u7684\u7ACB\u65B9\uFF1Ba \u4E0B\u6807 n\uFF1B\u767E\u5206\u6570\u8BFB\u300C\u767E\u5206\u4E4B\u2026\u300D\uFF1B",
-  "\u533A\u95F4\u8BFB\u300Ca \u5230 b\u300D\uFF1B\u4E0D\u7B49\u5F0F\u8BFB\u300C\u5927\u4E8E\u7B49\u4E8E a \u5C0F\u4E8E\u7B49\u4E8E b\u300D\u3002"
+  "\u533A\u95F4\u8BFB\u300Ca \u5230 b\u300D\uFF1B\u4E0D\u7B49\u5F0F\u8BFB\u300C\u5927\u4E8E\u7B49\u4E8E a \u5C0F\u4E8E\u7B49\u4E8E b\u300D\u3002",
+  "",
+  "\u4E94\u3001\u6D88\u6B67\u4F18\u5148\u7528 segment.sentence\uFF08\u7247\u6BB5\u6240\u5728\u6574\u53E5\u7684\u539F\u6587\uFF0C\u6700\u53EF\u9760\uFF09\uFF0C\u5176\u6B21 context.before\uFF1A",
+  "15. \u7BAD\u5934\uFF1A\u6781\u9650\u8BED\u5883\uFF08lim\u3001\u8D8B\u4E8E\u3001\u8D8B\u8FD1\u3001n \u8D8B\u4E8E\u65E0\u7A77\uFF09\u8BFB\u300C\u8D8B\u5411\u4E8E\u300D\uFF1B\u51FD\u6570\u6216\u6620\u5C04\u7684\u5B9A\u4E49\u5904",
+  "\uFF08f: A \u2192 B\u3001\u6620\u5C04\u3001\u5B9A\u4E49\u57DF\u3001\u503C\u57DF\uFF09\u8BFB\u300C\u4ECE A \u5230 B \u7684\u6620\u5C04\u300D\uFF1B\u547D\u9898\u903B\u8F91\u8BFB\u300C\u8574\u542B\u300D\uFF1B",
+  "\u5E8F\u5217\u6216\u53D8\u6362\u8BFB\u300C\u53D8\u6362\u4E3A\u300D\uFF1B\u5224\u65AD\u4E0D\u4E86\u5C31\u8BFB\u300C\u5230\u300D\u3002",
+  "16. \u62EC\u53F7\uFF1A\u5728\u53D6\u503C\u8303\u56F4\u3001\u5B9A\u4E49\u57DF\u3001\u4E0D\u7B49\u5F0F\u8BED\u5883\uFF0C(a, b) \u8BFB\u300C\u5F00\u533A\u95F4 a \u5230 b\u300D\uFF0C[a, b] \u8BFB\u300C\u95ED\u533A\u95F4 a \u5230 b\u300D\uFF0C",
+  "(a, b] \u8BFB\u300C\u5DE6\u5F00\u53F3\u95ED\u533A\u95F4 a \u5230 b\u300D\uFF0C[a, b) \u8BFB\u300C\u5DE6\u95ED\u53F3\u5F00\u533A\u95F4 a \u5230 b\u300D\uFF1B\u5728\u5750\u6807\u6216\u6709\u5E8F\u5BF9\u8BED\u5883\u8BFB\u300C\u70B9 a b\u300D\uFF1B",
+  "f(x) \u8BFB\u300Cf \u5728 x \u5904\u7684\u503C\u300D\u6216\u300Cf x\u300D\uFF1B\u7EC4\u5408\u6570 (n k) \u8BFB\u300Cn \u9009 k\u300D\u3002\u4E0D\u8981\u4E00\u5F8B\u8BFB\u6210\u300C\u70B9\u300D\u3002",
+  "17. \u5176\u5B83\u6613\u6DF7\u8BB0\u53F7\uFF1A\xB7 \u70B9\u4E58\uFF1B\xD7 \u4E58\u6216\u53C9\u4E58\uFF1B\u2218 \u590D\u5408\uFF1B\u2208 \u5C5E\u4E8E\uFF1B\u2282 \u5305\u542B\u4E8E\uFF1B\u222A \u5E76\u96C6\uFF1B\u2229 \u4EA4\u96C6\uFF1B\u2205 \u7A7A\u96C6\uFF1B",
+  "\u2200 \u4EFB\u610F\uFF1B\u2203 \u5B58\u5728\uFF1B\u2211 \u6C42\u548C\uFF1B\u220F \u8FDE\u4E58\uFF1B\u222B \u79EF\u5206\uFF1B\u2202 \u504F\u5BFC\uFF1B\u2207 \u68AF\u5EA6\uFF1B\u2261 \u6052\u7B49\u4E8E\uFF1B\u2245 \u540C\u6784\uFF1B\u2248 \u7EA6\u7B49\u4E8E\uFF1B",
+  "\u2260 \u4E0D\u7B49\u4E8E\uFF1B! \u9636\u4E58\uFF1B|a| \u7EDD\u5BF9\u503C\uFF1BP(A|B) \u5728 B \u53D1\u751F\u7684\u6761\u4EF6\u4E0B A \u7684\u6982\u7387\u3002",
+  "18. \u540C\u4E00\u7B26\u53F7\u5728\u4E0D\u540C\u8BED\u5883\u542B\u4E49\u4E0D\u540C\uFF08s \u79D2\u6216\u4F4D\u79FB\u3001T \u5468\u671F\u6216\u6E29\u5EA6\u3001R \u7535\u963B\u6216\u534A\u5F84\uFF09\uFF0C",
+  "\u4E00\u5F8B\u4EE5 segment.sentence \u4E0E context.symbols \u4E3A\u51C6\uFF0C\u4E0D\u8981\u53EA\u6309\u9ED8\u8BA4\u542B\u4E49\u5FF5\u3002"
 ].join("\n");
 function extractNumbers(text5) {
   const out = [];
@@ -14051,6 +14120,8 @@ function buildUserPayload(req) {
   const symbols = (req.context && req.context.symbols ? req.context.symbols : []).filter((s) => s && s.sym && s.meaning).slice(0, 12);
   if (symbols.length) context.symbols = symbols;
   const segment = { type: req.kind, text: req.text };
+  const sentence = req.meta && req.meta.sentence ? req.meta.sentence.trim().slice(0, 400) : "";
+  if (sentence) segment.sentence = sentence;
   if (req.meta && req.meta.lang) segment.lang = req.meta.lang;
   if (req.kind === "table" && req.meta && req.meta.rows) segment.rows = req.meta.rows;
   const payload = { task: KIND_INSTRUCTIONS[req.kind] };
@@ -14130,11 +14201,12 @@ function normalizeSymbols(v) {
   }
   return out;
 }
-function contextHash(context) {
+function contextHash(context, sentence) {
   const before = context && context.before ? context.before : "";
   const symbols = context && context.symbols ? context.symbols : [];
-  if (!before && symbols.length === 0) return "";
-  const s = before + "|" + symbols.map((x) => x.sym + ":" + x.meaning).join(",");
+  const local = sentence ? sentence : "";
+  if (!local && !before && symbols.length === 0) return "";
+  const s = local + "\0" + before + "|" + symbols.map((x) => x.sym + ":" + x.meaning).join(",");
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i);
@@ -14172,7 +14244,7 @@ var SpeechRewriter = class _SpeechRewriter {
     const text5 = req.text ?? "";
     if (!text5.trim()) return null;
     if (!this.configured) return null;
-    const ctxHash = contextHash(req.context);
+    const ctxHash = contextHash(req.context, req.meta && req.meta.sentence);
     const key = PROMPT_VERSION + "|" + req.kind + "|" + (req.meta && req.meta.lang ? req.meta.lang : "") + "|" + ctxHash + "|" + text5;
     if (this.opts.cache) {
       const hit = this.cache.get(key);
@@ -14199,7 +14271,9 @@ var SpeechRewriter = class _SpeechRewriter {
       if (looksLikePromptEcho(parsed.speech)) return null;
       if (!withinLengthLimit(text5, parsed.speech)) return null;
       const before = req.context && req.context.before ? req.context.before : "";
-      if (before.length >= 40 && parsed.speech.length >= 40 && contextEchoRatio(parsed.speech, before) >= 0.6) {
+      const sentence = req.meta && req.meta.sentence ? req.meta.sentence : "";
+      const echoRef = sentence.length > before.length ? sentence : before;
+      if (echoRef.length >= 40 && parsed.speech.length >= 40 && contextEchoRatio(parsed.speech, echoRef) >= 0.6) {
         return null;
       }
       if (!verifyNumbers(text5, parsed.speech)) return null;
@@ -15037,7 +15111,8 @@ var VOICE_SETTINGS_DEFAULTS = {
   rewriteCache: true,
   rewriteDisableThinking: true,
   rewriteContextChars: 800,
-  pronunciationFixes: "",
+  pronunciationFixes: DEFAULT_PRONUNCIATION_TABLE,
+  pronunciationEnabled: true,
   mathMode: "rules"
 };
 function createVoiceSettingsSchema(defs) {
@@ -15077,7 +15152,8 @@ function createVoiceSettingsSchema(defs) {
     rewriteCache: z.boolean().default(d.rewriteCache).description("\u76F8\u540C\u7247\u6BB5\u590D\u7528\u8BB2\u7A3F\uFF08\u9ED8\u8BA4\u5F00\uFF0C\u51CF\u5C11\u91CD\u590D\u8BF7\u6C42\uFF09"),
     rewriteDisableThinking: z.boolean().default(d.rewriteDisableThinking).description("\u5173\u95ED\u6539\u5199\u6A21\u578B\u7684\u601D\u8003\u94FE\uFF08\u9ED8\u8BA4\u5F00\uFF09\uFF1AGLM-4.5 \u7B49\u601D\u8003\u578B\u6A21\u578B\u4E0D\u5173\u601D\u8003\u53EA\u4F1A\u8F93\u51FA\u63A8\u7406\u3001\u6B63\u6587\u4E3A\u7A7A\uFF0C\u5BFC\u81F4\u6539\u5199\u56DE\u9000\uFF1B\u4EC5\u7AEF\u70B9\u652F\u6301 thinking \u53C2\u6570\u65F6\u6709\u6548"),
     rewriteContextChars: z.number().min(0).max(4e3).default(d.rewriteContextChars).description("\u4F20\u7ED9\u6539\u5199\u6A21\u578B\u7684\u524D\u6587\u5B57\u7B26\u4E0A\u9650\uFF08\u9ED8\u8BA4 800\uFF1B\u5B9E\u9645\u957F\u5EA6\u6309\u7247\u6BB5\u52A8\u6001\u4F38\u7F29\uFF0C\u77ED\u7247\u6BB5\u5C11\u7ED9\u3001\u5927\u4EE3\u7801\u5757/\u5927\u8868\u683C\u591A\u7ED9\uFF1B0 = \u4E0D\u7ED9\u524D\u6587\uFF0C\u4EC5\u4FDD\u7559\u7B26\u53F7\u8868\uFF09"),
-    pronunciationFixes: z.string().default(d.pronunciationFixes).description("\u591A\u97F3\u5B57\u8BFB\u97F3\u66FF\u4EE3\u8868\uFF08\u9ED8\u8BA4\u7A7A = \u4E0D\u6539\u4EFB\u4F55\u8BCD\uFF09\uFF1A\u6BCF\u884C\u300C\u539F\u8BCD => \u540C\u97F3\u66FF\u8EAB\u300D\uFF0C\u66FF\u8EAB\u5FC5\u987B\u4E0E\u539F\u8BCD\u7B49\u5B57\u6570\uFF0C\u53EA\u5141\u8BB8\u540C\u97F3\u66FF\u6362\uFF0C\u4E0D\u5141\u8BB8\u589E\u5220\u5B57\u6216\u6539\u6210\u540C\u4E49\u8BCD"),
+    pronunciationEnabled: z.boolean().default(d.pronunciationEnabled).description("\u542F\u7528\u591A\u97F3\u5B57\u7528\u6237\u8BCD\u8868\uFF08\u9ED8\u8BA4\u5F00\uFF09\u3002\u5173 = \u5B8C\u5168\u4E0D\u6539\u4EFB\u4F55\u6717\u8BFB\u6587\u672C\uFF08\u5C4F\u5E55\u672C\u6765\u5C31\u4E0D\u53D7\u5F71\u54CD\uFF09"),
+    pronunciationFixes: z.string().default(d.pronunciationFixes).description("\u591A\u97F3\u5B57\u7528\u6237\u8BCD\u8868\uFF08\u53EF\u589E\u5220/\u6E05\u7A7A\uFF09\uFF1A\u6BCF\u884C\u300C\u539F\u8BCD => \u540C\u97F3\u66FF\u8EAB\u300D\uFF0C\u66FF\u8EAB\u5FC5\u987B\u4E0E\u539F\u8BCD\u7B49\u5B57\u6570\uFF0C\u53EA\u5141\u8BB8\u540C\u97F3\u66FF\u6362\uFF0C\u4E0D\u5141\u8BB8\u589E\u5220\u5B57\u6216\u6539\u6210\u540C\u4E49\u8BCD\uFF1B\u539F\u8BCD\u4E5F\u53EF\u5199\u6210\u6B63\u5219 /pattern/flags\uFF08\u7528\u4E8E\u300C\u7B2C N \u884C\u300D\u8FD9\u7C7B\u52A8\u6001\u4E0A\u4E0B\u6587\uFF0C\u6B64\u65F6\u8DF3\u8FC7\u7B49\u5B57\u6570\u6821\u9A8C\uFF0C\u66FF\u6362\u4E32\u652F\u6301 $1\uFF09\u3002\u9ED8\u8BA4\u503C\u662F\u4E00\u4EFD\u300C\u884C(h\xE1ng)\u300D\u540C\u97F3\u8BCD\u8868\uFF0C\u4E0D\u4EE3\u8868\u56FA\u5B9A\u5185\u7F6E\uFF0C\u968F\u65F6\u53EF\u6539"),
     mathMode: z.union([z.const("rules"), z.const("model"), z.const("verbatim")]).default(d.mathMode).description("\u6570\u5B66\u6717\u8BFB\u6A21\u5F0F\uFF1Arules \u786E\u5B9A\u6027\u89C4\u5219\uFF08\u9ED8\u8BA4\uFF0C\u96F6\u5BB9\u9519\uFF09/ model \u4EA4\u7ED9\u6539\u5199\u6A21\u578B / verbatim \u539F\u6837\u5FF5\u51FA")
   });
 }
@@ -15209,8 +15285,8 @@ function apply(ctx, config) {
     if (raw === pronunciationRaw) return;
     pronunciationRaw = raw;
     const parsed = parsePronunciationFixes(raw);
-    pronunciation = parsed.fixes;
     pronunciationErrors = parsed.errors;
+    pronunciation = vset.pronunciationEnabled ? parsed.fixes : [];
   };
   syncPronunciation();
   const speechConfig = () => ({

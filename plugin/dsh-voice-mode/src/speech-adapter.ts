@@ -163,7 +163,12 @@ export class SpeechAdapter {
       case 'inline-math':
         if (cfg.mathMode === 'model') {
           const r = cfg.rewriter
-            ? await cfg.rewriter.rewrite({ kind: 'inline-math', text: seg.text, context: this.context(seg.text.length) })
+            ? await cfg.rewriter.rewrite({
+                kind: 'inline-math',
+                text: seg.text,
+                meta: seg.meta,
+                context: this.context(seg.text.length),
+              })
             : null
           if (r && r.symbols) this.learnSymbols(r.symbols)
           this.emit(r ? r.text : latexToSpeech(seg.text))

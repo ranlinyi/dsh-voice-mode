@@ -57,10 +57,12 @@ export function sanitizeForTts(text: string): string {
  *  - 字数不等的条目被忽略并回报错误，绝不静默改名。
  */
 export interface PronunciationFix {
-  /** 原文中会被读错的写法。 */
+  /** 字面原词（正则形式时为空串）。 */
   term: string
-  /** 朗读替身：必须与 term 等字数且逐字同音（同音由维护者负责，插件只强制等字数）。 */
+  /** 朗读替身；字面形式必须与 term 等字数，正则形式支持 $1 等捕获引用。 */
   spoken: string
+  /** 正则形式时存在（原词写成 /pattern/flags 时编译）。 */
+  re?: RegExp
 }
 
 export interface PronunciationFixesResult {
@@ -69,11 +71,57 @@ export interface PronunciationFixesResult {
   errors: string[]
 }
 
+/**
+ * 用户多音字词表的**默认初值**（不是隐藏内置逻辑：它是设置项 pronunciationFixes
+ * 的初始文本，完全可见、可改、可清空，并受 pronunciationEnabled 开关控制）。
+ * 全部是等字数同音替换（航 = háng），只改朗读、不改屏幕。
+ */
+export const DEFAULT_PRONUNCIATION_TABLE = String.raw`
+# 多音字：行(háng)。注意不要写单字「行 => 航」，那会让"进行/不行"变成"进航/不航"。
+行业 => 航业
+行列 => 航列
+行内 => 航内
+行间 => 航间
+行号 => 航号
+行数 => 航数
+行距 => 航距
+行高 => 航高
+行宽 => 航宽
+行首 => 航首
+行末 => 航末
+行尾 => 航尾
+行会 => 航会
+行情 => 航情
+行家 => 航家
+银行 => 银航
+内行 => 内航
+外行 => 外航
+逐行 => 逐航
+多行 => 多航
+单行 => 单航
+跨行 => 跨航
+首行 => 首航
+末行 => 末航
+该行 => 该航
+本行 => 本航
+每行 => 每航
+几行 => 几航
+一行 => 一航
+两行 => 两航
+# 正则：带数字/量词的行号（第 3 行 / 第 12 行）
+/第\s*([0-9一二三四五六七八九十百千万]+)\s*行/ => 第$1航
+/([0-9]+\s*)行/ => $1航
+`.trim()
+
 const codePoints = (s: string): string[] => Array.from(s)
 
 /**
  * 解析用户维护的替代表：每行「原词 => 替身」（也接受 `->` / `→`）；
  * 空行与 `#` 注释忽略；字段为空或字数不等的条目进 errors 且不生效。
+ *
+ * 原词也可写成正则 /pattern/flags（默认补 g），用于「第 3 行 / 第 12 行」这类
+ * 字面表覆盖不了的动态上下文；正则条目跳过等字数校验，替换串支持 $1 等捕获引用。
+ * 正则由使用者自负（含灾难性回溯风险），插件只做编译合法性检查。
  */
 export function parsePronunciationFixes(raw: string): PronunciationFixesResult {
   const fixes: PronunciationFix[] = []
@@ -93,6 +141,18 @@ export function parsePronunciationFixes(raw: string): PronunciationFixesResult {
       errors.push('第 ' + (i + 1) + ' 行原词或替身为空：' + line)
       continue
     }
+    // 正则形式：/pattern/flags → 编译即用，跳过等字数校验。
+    const reMatch = /^\/(.+)\/([a-z]*)$/.exec(term)
+    if (reMatch) {
+      let flags = reMatch[2]
+      if (!flags.includes('g')) flags += 'g'
+      try {
+        fixes.push({ term: '', spoken, re: new RegExp(reMatch[1], flags) })
+      } catch (e) {
+        errors.push('第 ' + (i + 1) + ' 行正则不合法（' + (e instanceof Error ? e.message : String(e)) + '）：' + line)
+      }
+      continue
+    }
     const a = codePoints(term).length
     const b = codePoints(spoken).length
     if (a !== b) {
@@ -109,7 +169,9 @@ export function parsePronunciationFixes(raw: string): PronunciationFixesResult {
 export function applyPronunciationFixes(text: string, fixes: readonly PronunciationFix[] = []): string {
   if (fixes.length === 0) return String(text)
   let out = String(text)
-  for (const fix of fixes) out = out.split(fix.term).join(fix.spoken)
+  for (const fix of fixes) {
+    out = fix.re ? out.replace(fix.re, fix.spoken) : out.split(fix.term).join(fix.spoken)
+  }
   return out
 }
 

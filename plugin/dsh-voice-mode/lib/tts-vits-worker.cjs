@@ -30,6 +30,42 @@ var import_sherpa_onnx_node = __toESM(require("sherpa-onnx-node"), 1);
 function sanitizeForTts(text) {
   return String(text).replace(/[*_#>`|^=+~]/g, " ").replace(/\s{2,}/g, " ").replace(/([\u3400-\u9fff])\s+(?=[\u3400-\u9fff])/g, "$1").trim();
 }
+var DEFAULT_PRONUNCIATION_TABLE = String.raw`
+# 多音字：行(háng)。注意不要写单字「行 => 航」，那会让"进行/不行"变成"进航/不航"。
+行业 => 航业
+行列 => 航列
+行内 => 航内
+行间 => 航间
+行号 => 航号
+行数 => 航数
+行距 => 航距
+行高 => 航高
+行宽 => 航宽
+行首 => 航首
+行末 => 航末
+行尾 => 航尾
+行会 => 航会
+行情 => 航情
+行家 => 航家
+银行 => 银航
+内行 => 内航
+外行 => 外航
+逐行 => 逐航
+多行 => 多航
+单行 => 单航
+跨行 => 跨航
+首行 => 首航
+末行 => 末航
+该行 => 该航
+本行 => 本航
+每行 => 每航
+几行 => 几航
+一行 => 一航
+两行 => 两航
+# 正则：带数字/量词的行号（第 3 行 / 第 12 行）
+/第\s*([0-9一二三四五六七八九十百千万]+)\s*行/ => 第$1航
+/([0-9]+\s*)行/ => $1航
+`.trim();
 
 // src/tts-vits-worker.ts
 var { createOfflineTts } = import_sherpa_onnx.default;

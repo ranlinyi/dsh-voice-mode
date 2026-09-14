@@ -21,7 +21,7 @@ await build({
   platform: 'node',
   logLevel: 'silent',
 })
-const { SentenceSegmenter, plainText, splitSentences, sanitizeForTts, applyPronunciationFixes, parsePronunciationFixes } = await import(pathToFileURL(out).href)
+const { SentenceSegmenter, plainText, splitSentences, sanitizeForTts, applyPronunciationFixes, parsePronunciationFixes, DEFAULT_PRONUNCIATION_TABLE } = await import(pathToFileURL(out).href)
 
 let passed = 0
 const t = (name, fn) => {
@@ -88,6 +88,37 @@ t('同词同替身（term === spoken）直接跳过，不算错', () => {
   const { fixes, errors } = parsePronunciationFixes('最速降线 => 最速降线')
   assert.deepEqual(fixes, [])
   assert.equal(errors.length, 0)
+})
+t('替代表支持正则：覆盖「第 N 行」这类动态上下文', () => {
+  const { fixes, errors } = parsePronunciationFixes('/第\\s*(\\d+)\\s*行/ => 第$1航')
+  assert.equal(errors.length, 0)
+  assert.equal(fixes.length, 1)
+  assert.ok(fixes[0].re instanceof RegExp)
+  assert.equal(applyPronunciationFixes('见第 3 行和第 12 行。', fixes), '见第3航和第12航。')
+  // 单字「行 => 航」会误伤「进行」，所以必须按词/模式匹配：未被规则命中的 行 原样保留
+  assert.equal(applyPronunciationFixes('进行下一步。', fixes), '进行下一步。')
+})
+t('非法正则进 errors 且不生效', () => {
+  const { fixes, errors } = parsePronunciationFixes('/([/ => x')
+  assert.equal(fixes.length, 0)
+  assert.equal(errors.length, 1)
+  assert.ok(errors[0].includes('正则不合法'), errors[0])
+})
+console.log('默认用户词表（行 háng，可在设置里改/清空）')
+t('默认词表可解析、零错误，字面条目与正则条目都在', () => {
+  const { fixes, errors } = parsePronunciationFixes(DEFAULT_PRONUNCIATION_TABLE)
+  assert.equal(errors.length, 0, JSON.stringify(errors))
+  assert.ok(fixes.some((x) => x.re), '应含正则条目')
+  assert.ok(fixes.some((x) => !x.re), '应含字面条目')
+  assert.ok(fixes.length >= 30, String(fixes.length))
+})
+t('默认词表：行(háng) 读对，且不误伤「进行/不行」', () => {
+  const { fixes } = parsePronunciationFixes(DEFAULT_PRONUNCIATION_TABLE)
+  assert.equal(applyPronunciationFixes('见第 3 行和第 12 行。', fixes), '见第3航和第12航。')
+  assert.equal(applyPronunciationFixes('逐行读取多行文本。', fixes), '逐航读取多航文本。')
+  assert.equal(applyPronunciationFixes('银行业与行情。', fixes), '银航业与航情。')
+  assert.equal(applyPronunciationFixes('进行下一步，不行就退回。', fixes), '进行下一步，不行就退回。')
+  assert.equal(applyPronunciationFixes('并行与发行。', fixes), '并行与发行。')
 })
 t('分句器按注入的替代表替换朗读文本', () => {
   const s = new SentenceSegmenter({ fixes: () => [{ term: '最速降线', spoken: '最速酱线' }] })

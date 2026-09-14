@@ -42,6 +42,8 @@ export interface RewriteRequest {
     rows?: string[][]
     rowCount?: number
     colCount?: number
+    /** 片段所在整句/整段的原文（block-router 提供）：消歧最关键的依据。 */
+    sentence?: string
   }
   /** 格式化后的上下文（缺省 = 无上下文）。 */
   context?: RewriteContext
@@ -72,7 +74,7 @@ export interface RewriteResult {
 }
 
 /** 提示词/行为版本：改变提示词、协议或后处理时递增；缓存键含它，避免跨版本复用旧讲稿。 */
-const PROMPT_VERSION = 'sp4'
+const PROMPT_VERSION = 'sp5'
 
 /** 各片段类型的任务说明（放进请求 JSON 的 task 字段）。 */
 const KIND_INSTRUCTIONS: Record<RewriteKind, string> = {
@@ -96,7 +98,7 @@ const SYSTEM_PROMPT = [
   '',
   '一、输入是一个 JSON 对象：task 是本次改写要求；context.before 是最近已朗读的正文；',
   'context.symbols 是已确认的符号含义（sym 符号 / meaning 中文含义）；',
-  'segment 是待改写片段（type / text / 可选 lang、rows）。',
+  'segment 是待改写片段（type / text / sentence 所在整句原文 / 可选 lang、rows）。',
   '',
   '二、最高优先规则：',
   '1. context 只供理解语境：不要朗读它、不要翻译它、不要复述它、不要把它写进输出；你只改写 segment。',
@@ -127,6 +129,19 @@ const SYSTEM_PROMPT = [
   '13. 绝不能把字母读成计量单位：g 不读克、m 不读米、s 不读秒、t 不读吨。',
   '14. 算式读法：分数读「二分之一」；a 的平方、a 的立方；a 下标 n；百分数读「百分之…」；',
   '区间读「a 到 b」；不等式读「大于等于 a 小于等于 b」。',
+  '',
+  '五、消歧优先用 segment.sentence（片段所在整句的原文，最可靠），其次 context.before：',
+  '15. 箭头：极限语境（lim、趋于、趋近、n 趋于无穷）读「趋向于」；函数或映射的定义处',
+  '（f: A → B、映射、定义域、值域）读「从 A 到 B 的映射」；命题逻辑读「蕴含」；',
+  '序列或变换读「变换为」；判断不了就读「到」。',
+  '16. 括号：在取值范围、定义域、不等式语境，(a, b) 读「开区间 a 到 b」，[a, b] 读「闭区间 a 到 b」，',
+  '(a, b] 读「左开右闭区间 a 到 b」，[a, b) 读「左闭右开区间 a 到 b」；在坐标或有序对语境读「点 a b」；',
+  'f(x) 读「f 在 x 处的值」或「f x」；组合数 (n k) 读「n 选 k」。不要一律读成「点」。',
+  '17. 其它易混记号：· 点乘；× 乘或叉乘；∘ 复合；∈ 属于；⊂ 包含于；∪ 并集；∩ 交集；∅ 空集；',
+  '∀ 任意；∃ 存在；∑ 求和；∏ 连乘；∫ 积分；∂ 偏导；∇ 梯度；≡ 恒等于；≅ 同构；≈ 约等于；',
+  '≠ 不等于；! 阶乘；|a| 绝对值；P(A|B) 在 B 发生的条件下 A 的概率。',
+  '18. 同一符号在不同语境含义不同（s 秒或位移、T 周期或温度、R 电阻或半径），',
+  '一律以 segment.sentence 与 context.symbols 为准，不要只按默认含义念。',
 ].join('\n')
 
 /** 抽取需要保安全的数字 token。 */
@@ -204,6 +219,8 @@ export function buildUserPayload(req: RewriteRequest): string {
     .slice(0, 12)
   if (symbols.length) context.symbols = symbols
   const segment: Record<string, unknown> = { type: req.kind, text: req.text }
+  const sentence = req.meta && req.meta.sentence ? req.meta.sentence.trim().slice(0, 400) : ''
+  if (sentence) segment.sentence = sentence
   if (req.meta && req.meta.lang) segment.lang = req.meta.lang
   if (req.kind === 'table' && req.meta && req.meta.rows) segment.rows = req.meta.rows
   // 顺序固定为 task → context → segment：先交代任务与背景，再给待改写片段。
@@ -295,11 +312,12 @@ function normalizeSymbols(v: unknown): RewriteSymbol[] {
 }
 
 /** 上下文指纹：参与缓存键，避免不同上下文下错误复用同一片段的讲稿。 */
-export function contextHash(context?: RewriteContext): string {
+export function contextHash(context?: RewriteContext, sentence?: string): string {
   const before = context && context.before ? context.before : ''
   const symbols = context && context.symbols ? context.symbols : []
-  if (!before && symbols.length === 0) return ''
-  const s = before + '|' + symbols.map((x) => x.sym + ':' + x.meaning).join(',')
+  const local = sentence ? sentence : ''
+  if (!local && !before && symbols.length === 0) return ''
+  const s = local + '\u0000' + before + '|' + symbols.map((x) => x.sym + ':' + x.meaning).join(',')
   let h = 2166136261
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i)
@@ -347,7 +365,7 @@ export class SpeechRewriter {
     if (!text.trim()) return null
     if (!this.configured) return null
 
-    const ctxHash = contextHash(req.context)
+    const ctxHash = contextHash(req.context, req.meta && req.meta.sentence)
     const key =
       PROMPT_VERSION + '|' + req.kind + '|' + (req.meta && req.meta.lang ? req.meta.lang : '') +
       '|' + ctxHash + '|' + text
@@ -379,8 +397,11 @@ export class SpeechRewriter {
       if (!parsed) return null
       if (looksLikePromptEcho(parsed.speech)) return null
       if (!withinLengthLimit(text, parsed.speech)) return null
+      // 回显守卫：取「整句原文」与「前文」里更长的那个作为参照（两者都可能被模型照抄）。
       const before = req.context && req.context.before ? req.context.before : ''
-      if (before.length >= 40 && parsed.speech.length >= 40 && contextEchoRatio(parsed.speech, before) >= 0.6) {
+      const sentence = req.meta && req.meta.sentence ? req.meta.sentence : ''
+      const echoRef = sentence.length > before.length ? sentence : before
+      if (echoRef.length >= 40 && parsed.speech.length >= 40 && contextEchoRatio(parsed.speech, echoRef) >= 0.6) {
         return null
       }
       if (!verifyNumbers(text, parsed.speech)) return null

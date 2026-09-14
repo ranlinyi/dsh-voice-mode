@@ -41,6 +41,12 @@ export interface SpeechSegment {
     rows?: string[][]
     rowCount?: number
     colCount?: number
+    /**
+     * 行内片段：所在整句/整段的原始 Markdown 文本（已归一空白、限长）。
+     * 消歧关键——公式后面常跟着「是一个映射」「的取值范围」这类词，而流式前文
+     * 里它们还没到；把它一并交给改写器，才能分清「点/区间」「趋向/映射」。
+     */
+    sentence?: string
   }
 }
 
@@ -59,7 +65,7 @@ function tableData(node: any): string[][] {
   return rows
 }
 
-function pushInline(node: any, out: RawSegment[], block: number): void {
+function pushInline(node: any, out: RawSegment[], block: number, sentence?: string): void {
   switch (node.type) {
     case 'text':
       if (node.value) out.push({ kind: 'prose', text: node.value, block })
@@ -68,7 +74,7 @@ function pushInline(node: any, out: RawSegment[], block: number): void {
       out.push({ kind: 'inline-code', text: node.value, block })
       return
     case 'inlineMath':
-      out.push({ kind: 'inline-math', text: node.value, block })
+      out.push({ kind: 'inline-math', text: node.value, block, meta: sentence ? { sentence } : undefined })
       return
     case 'image':
       if (node.alt) out.push({ kind: 'prose', text: '图片：' + node.alt, block })
@@ -81,7 +87,7 @@ function pushInline(node: any, out: RawSegment[], block: number): void {
       return
     default:
       if (Array.isArray(node.children)) {
-        for (const c of node.children) pushInline(c, out, block)
+        for (const c of node.children) pushInline(c, out, block, sentence)
       } else {
         const s = toString(node)
         if (s) out.push({ kind: 'prose', text: s, block })
@@ -109,9 +115,12 @@ function walkBlocks(nodes: any[], out: RawSegment[], ctx: { n: number }): void {
         break
       }
       case 'paragraph':
-      case 'heading':
-        pushInline(node, out, ctx.n++)
+      case 'heading': {
+        // 整句原文：含公式后面的解释词，是消歧最可靠的依据（限长防超预算）。
+        const sentence = toString(node).replace(/\s+/g, ' ').trim().slice(0, 400)
+        pushInline(node, out, ctx.n++, sentence || undefined)
         break
+      }
       case 'list':
       case 'listItem':
       case 'blockquote':

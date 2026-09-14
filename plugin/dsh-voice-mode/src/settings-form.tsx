@@ -78,7 +78,8 @@ const FIELD_LABELS: Record<string, string> = {
   rewriteCache: '讲稿缓存',
   rewriteDisableThinking: '关闭思考链',
   rewriteContextChars: '上下文长度',
-  pronunciationFixes: '多音字替代表',
+  pronunciationEnabled: '启用多音字词表',
+  pronunciationFixes: '多音字用户词表',
   rewriteSecret: '写入密钥',
 }
 const setHeader: React.CSSProperties = {
@@ -1239,8 +1240,11 @@ export function VoiceSettingsCard({ scope }: { scope: ScopeController }): React.
             <Row name="rewriteContextChars" desc={tr('descRewriteContextChars')}>
               <NumberField score={scope} field="rewriteContextChars" value={value.rewriteContextChars ?? 800} min={0} max={4000} step={50} />
             </Row>
+            <Row name="pronunciationEnabled" desc={tr('descPronunciationEnabled')}>
+              <input type="checkbox" checked={value.pronunciationEnabled !== false} onChange={(e) => void scope.set('pronunciationEnabled', e.target.checked)} />
+            </Row>
             <Row name="pronunciationFixes" desc={tr('descPronunciationFixes')}>
-              <TextAreaField score={scope} field="pronunciationFixes" value={value.pronunciationFixes ?? ''} placeholder="原词 => 同音替词（等字数）" rows={3} />
+              <TextAreaField score={scope} field="pronunciationFixes" value={value.pronunciationFixes ?? ''} placeholder="词 => 同音替词；/正则/ => 替换" rows={4} />
             </Row>
             </Section>
             <Section title={tr('secModel')}>

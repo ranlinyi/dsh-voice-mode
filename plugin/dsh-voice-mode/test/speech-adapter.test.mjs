@@ -164,6 +164,16 @@ await t('动态前文：短片段少给、大片段多给（同一段前文）',
   assert.ok(large.before.length <= 800, String(large.before.length))
 })
 
+await t('整句原文：行内公式带上所在整句（消歧用）', async () => {
+  const calls = []
+  const fake = { rewrite: async (req) => { calls.push(req); return { text: 'v 的 2 次方', cached: false } } }
+  await run({ enabled: true, mathMode: 'model', rewriter: fake }, ['设 $f: A \\to B$ 是一个映射。\n'])
+  assert.equal(calls.length, 1)
+  const meta = calls[0].meta
+  assert.ok(meta && typeof meta.sentence === 'string', JSON.stringify(meta))
+  assert.ok(meta.sentence.includes('是一个映射'), meta.sentence)
+})
+
 await t('读音替代表：透传到分句器（只影响朗读文本）', async () => {
   const seen = await run(
     { enabled: true, mathMode: 'rules', rewriter: null, pronunciation: [{ term: '最速降线', spoken: '最速酱线' }] },
