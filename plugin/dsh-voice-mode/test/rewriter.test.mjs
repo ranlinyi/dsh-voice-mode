@@ -22,7 +22,7 @@ await build({
 })
 const {
   SpeechRewriter, extractNumbers, verifyNumbers, parseSpeechResponse, contextHash,
-  withinLengthLimit, contextEchoRatio,
+  withinLengthLimit, contextEchoRatio, sentenceEchoRatio, prefixEcho,
 } = await import(pathToFileURL(out).href)
 
 let passed = 0
@@ -180,6 +180,32 @@ await t('整句原文也参与回显守卫（照抄整句被丢弃）', async ()
   const sentence = '设 f 是从集合 A 到集合 B 的一个映射，并且对任意的 x 都有 f 在 x 处的值属于 B。'
   const r = mk(J({ speech: sentence }))
   assert.equal(await r.rewrite({ kind: 'inline-math', text: 'f: A \\to B', meta: { sentence } }), null)
+})
+
+await t('复述整句守卫：短句也生效（旧实现被 >=40 字门槛短路）', () => {
+  const sentence = '平均/最坏 O(n^2)，最好 O(n)。'
+  // 模型把整句吐回来
+  assert.equal(prefixEcho('平均/最坏 O(n 平方)，最好 O(n)。', sentence, 'O(n)'), true)
+  assert.ok(sentenceEchoRatio('平均/最坏 O(n 平方)，最好 O(n)。', sentence, 'O(n)') >= 0.7)
+  // 正常读法 / 借用句中的定义词，都不能被误杀
+  assert.equal(prefixEcho('大 O，n 的平方', sentence, 'O(n^2)'), false)
+  assert.ok(sentenceEchoRatio('大 O，n 的平方', sentence, 'O(n^2)') < 0.7)
+  assert.equal(prefixEcho('重力加速度', '设 g 表示重力加速度。', 'g'), false)
+  assert.ok(sentenceEchoRatio('重力加速度', '设 g 表示重力加速度。', 'g') < 0.7)
+})
+
+await t('复述整句被丢弃后回退确定性读法（不再重复朗读）', async () => {
+  const sentence = '平均/最坏 O(n^2)，最好 O(n)。'
+  const r = mk(J({ speech: '平均/最坏 O(n 平方)，最好 O(n)。' }))
+  assert.equal(await r.rewrite({ kind: 'inline-math', text: 'O(n)', meta: { sentence } }), null)
+})
+
+await t('正常读法不被复述守卫误杀', async () => {
+  const sentence = '平均/最坏 O(n^2)，最好 O(n)。'
+  const r = mk(J({ speech: '大 O，n 的平方' }))
+  const res = await r.rewrite({ kind: 'inline-math', text: 'O(n^2)', meta: { sentence } })
+  assert.ok(res, '正常读法应被采用')
+  assert.equal(res.text, '大 O，n 的平方')
 })
 
 await t('端点不认 response_format（400）：去掉后重试一次', async () => {

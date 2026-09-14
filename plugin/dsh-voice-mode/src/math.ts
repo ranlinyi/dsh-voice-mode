@@ -30,6 +30,10 @@ const OPERATORS: Record<string, string> = {
   oint: '环路积分', partial: '偏导', nabla: '梯度', to: '趋于', rightarrow: '趋于',
   in: '属于', notin: '不属于', forall: '任意', exists: '存在', propto: '正比于',
   subset: '包含于', supset: '包含', cup: '并', cap: '交', emptyset: '空集',
+  subseteq: '包含于', supseteq: '包含',
+  lesssim: '小于等于', gtrsim: '大于等于', leqslant: '小于等于', geqslant: '大于等于',
+  ll: '远小于', gg: '远大于', Rightarrow: '推出', Leftrightarrow: '等价于', leftrightarrow: '等价于',
+  mapsto: '映射到', circ: '复合', odot: '点乘', oplus: '直和',
   therefore: '所以', because: '因为', angle: '角', degree: '度',
 }
 
@@ -44,6 +48,8 @@ const SYMBOLS: Record<string, string> = {
 
 const ESCAPED: Record<string, string> = {
   '\\{': '左花括号', '\\}': '右花括号', '\\%': '百分号', '\\&': '和', '\\$': '美元',
+  // 排版性空白命令：读音上直接忽略（否则 \sim\!32 会念出感叹号）
+  '\\,': '', '\\;': '', '\\!': '', '\\:': '',
 }
 
 function skipWs(s: string, i: number): number {
@@ -77,8 +83,38 @@ function readArg(s: string, i: number): { text: string; next: number } {
   return { text: s[i] ?? '', next: i + 1 }
 }
 
+/** 读一个圆括号组 (…)（支持嵌套）；不是括号时退回 readArg。 */
+function readParen(s: string, i: number): { text: string; next: number } {
+  i = skipWs(s, i)
+  if (s[i] !== '(') return readArg(s, i)
+  let depth = 0
+  for (let j = i; j < s.length; j++) {
+    if (s[j] === '(') depth++
+    else if (s[j] === ')') {
+      depth--
+      if (depth === 0) return { text: s.slice(i + 1, j), next: j + 1 }
+    }
+  }
+  return { text: s.slice(i + 1), next: s.length }
+}
+
 function joinParts(parts: string[]): string {
   return parts.filter((p) => p !== '').join(' ').replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * 复杂度表达式内部：log 直接读英文（不读「对数」），给隐式乘法补「乘」，
+ * 并去掉成对括号的读法——O(n log n) 读「大 O，n 乘 log n」而不是「左括号…右括号」。
+ */
+function renderComplexity(tex: string): string {
+  const s = tex
+    .replace(/\\(log|lg|ln)\b/g, ' $1 ')
+    .replace(/\s+/g, ' ')
+    .replace(/([A-Za-z0-9])\s+(?=(?:log|lg|ln)\b)/g, '$1 \\cdot ')
+  return render(s)
+    .replace(/左括号|右括号|左方括号|右方括号|左花括号|右花括号/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 function render(s: string): string {
@@ -113,7 +149,24 @@ function render(s: string): string {
           i = a.next
           continue
         }
-        if (name === 'text' || name === 'mathrm' || name === 'operatorname' || name === 'mbox') {
+        if (name === 'quad' || name === 'qquad') {
+          flush()
+          i = j
+          continue
+        }
+        // 渐近记号：\Omega(...) / \Theta(...) 读「大 Omega，…」「大 Theta，…」
+        if ((name === 'Omega' || name === 'omega' || name === 'Theta' || name === 'theta') && s[skipWs(s, j)] === '(') {
+          flush()
+          const a = readParen(s, skipWs(s, j))
+          const label = name === 'Omega' || name === 'omega' ? '大 Omega，' : '大 Theta，'
+          parts.push(label + (a.text.replace(/\s+/g, '') === '1' ? '常数' : renderComplexity(a.text)))
+          i = a.next
+          continue
+        }
+        if (
+          name === 'text' || name === 'mathrm' || name === 'operatorname' || name === 'mbox' ||
+          name === 'mathbb' || name === 'mathcal' || name === 'mathbf' || name === 'mathsf' || name === 'mathtt'
+        ) {
           flush()
           const a = readArg(s, j)
           parts.push(a.text.trim())
@@ -159,6 +212,15 @@ function render(s: string): string {
     if (/\s/.test(c)) {
       flush()
       i++
+      continue
+    }
+    // 渐近记号：O(...) / o(...) 读「大 O，…」「小 o，…」
+    if ((c === 'O' || c === 'o') && s[skipWs(s, i + 1)] === '(') {
+      flush()
+      const a = readParen(s, skipWs(s, i + 1))
+      const inner = a.text.replace(/\s+/g, '') === '1' ? '常数' : renderComplexity(a.text)
+      parts.push((c === 'O' ? '大 O，' : '小 o，') + inner)
+      i = a.next
       continue
     }
     const sym = SYMBOLS[c]

@@ -13624,6 +13624,21 @@ var OPERATORS = {
   cup: "\u5E76",
   cap: "\u4EA4",
   emptyset: "\u7A7A\u96C6",
+  subseteq: "\u5305\u542B\u4E8E",
+  supseteq: "\u5305\u542B",
+  lesssim: "\u5C0F\u4E8E\u7B49\u4E8E",
+  gtrsim: "\u5927\u4E8E\u7B49\u4E8E",
+  leqslant: "\u5C0F\u4E8E\u7B49\u4E8E",
+  geqslant: "\u5927\u4E8E\u7B49\u4E8E",
+  ll: "\u8FDC\u5C0F\u4E8E",
+  gg: "\u8FDC\u5927\u4E8E",
+  Rightarrow: "\u63A8\u51FA",
+  Leftrightarrow: "\u7B49\u4EF7\u4E8E",
+  leftrightarrow: "\u7B49\u4EF7\u4E8E",
+  mapsto: "\u6620\u5C04\u5230",
+  circ: "\u590D\u5408",
+  odot: "\u70B9\u4E58",
+  oplus: "\u76F4\u548C",
   therefore: "\u6240\u4EE5",
   because: "\u56E0\u4E3A",
   angle: "\u89D2",
@@ -13670,7 +13685,12 @@ var ESCAPED = {
   "\\}": "\u53F3\u82B1\u62EC\u53F7",
   "\\%": "\u767E\u5206\u53F7",
   "\\&": "\u548C",
-  "\\$": "\u7F8E\u5143"
+  "\\$": "\u7F8E\u5143",
+  // 排版性空白命令：读音上直接忽略（否则 \sim\!32 会念出感叹号）
+  "\\,": "",
+  "\\;": "",
+  "\\!": "",
+  "\\:": ""
 };
 function skipWs(s, i) {
   let j = i;
@@ -13700,8 +13720,25 @@ function readArg(s, i) {
   }
   return { text: s[i] ?? "", next: i + 1 };
 }
+function readParen(s, i) {
+  i = skipWs(s, i);
+  if (s[i] !== "(") return readArg(s, i);
+  let depth = 0;
+  for (let j = i; j < s.length; j++) {
+    if (s[j] === "(") depth++;
+    else if (s[j] === ")") {
+      depth--;
+      if (depth === 0) return { text: s.slice(i + 1, j), next: j + 1 };
+    }
+  }
+  return { text: s.slice(i + 1), next: s.length };
+}
 function joinParts(parts) {
   return parts.filter((p) => p !== "").join(" ").replace(/\s+/g, " ").trim();
+}
+function renderComplexity(tex) {
+  const s = tex.replace(/\\(log|lg|ln)\b/g, " $1 ").replace(/\s+/g, " ").replace(/([A-Za-z0-9])\s+(?=(?:log|lg|ln)\b)/g, "$1 \\cdot ");
+  return render(s).replace(/左括号|右括号|左方括号|右方括号|左花括号|右花括号/g, " ").replace(/\s+/g, " ").trim();
 }
 function render(s) {
   const parts = [];
@@ -13735,7 +13772,20 @@ function render(s) {
           i = a.next;
           continue;
         }
-        if (name2 === "text" || name2 === "mathrm" || name2 === "operatorname" || name2 === "mbox") {
+        if (name2 === "quad" || name2 === "qquad") {
+          flush();
+          i = j;
+          continue;
+        }
+        if ((name2 === "Omega" || name2 === "omega" || name2 === "Theta" || name2 === "theta") && s[skipWs(s, j)] === "(") {
+          flush();
+          const a = readParen(s, skipWs(s, j));
+          const label = name2 === "Omega" || name2 === "omega" ? "\u5927 Omega\uFF0C" : "\u5927 Theta\uFF0C";
+          parts.push(label + (a.text.replace(/\s+/g, "") === "1" ? "\u5E38\u6570" : renderComplexity(a.text)));
+          i = a.next;
+          continue;
+        }
+        if (name2 === "text" || name2 === "mathrm" || name2 === "operatorname" || name2 === "mbox" || name2 === "mathbb" || name2 === "mathcal" || name2 === "mathbf" || name2 === "mathsf" || name2 === "mathtt") {
           flush();
           const a = readArg(s, j);
           parts.push(a.text.trim());
@@ -13781,6 +13831,14 @@ function render(s) {
     if (/\s/.test(c)) {
       flush();
       i++;
+      continue;
+    }
+    if ((c === "O" || c === "o") && s[skipWs(s, i + 1)] === "(") {
+      flush();
+      const a = readParen(s, skipWs(s, i + 1));
+      const inner = a.text.replace(/\s+/g, "") === "1" ? "\u5E38\u6570" : renderComplexity(a.text);
+      parts.push((c === "O" ? "\u5927 O\uFF0C" : "\u5C0F o\uFF0C") + inner);
+      i = a.next;
       continue;
     }
     const sym = SYMBOLS[c];
@@ -13988,7 +14046,7 @@ var SpeechAdapter = class {
 };
 
 // src/rewriter.ts
-var PROMPT_VERSION = "sp5";
+var PROMPT_VERSION = "sp6";
 var KIND_INSTRUCTIONS = {
   "display-math": "\u8FD9\u662F\u72EC\u7ACB\u5C55\u793A\u7684\u6570\u5B66\u516C\u5F0F\u3002\u7528\u4E00\u4E24\u53E5\u8BDD\u8BF4\u660E\u5B83\u8868\u8FBE\u7684\u5173\u7CFB\uFF08\u67D0\u4E2A\u91CF\u7B49\u4E8E\u4EC0\u4E48\u3001\u968F\u4EC0\u4E48\u53D8\u5316\uFF09\uFF1B\u53EA\u6709\u5728\u542B\u4E49\u786E\u5B9E\u4E0D\u660E\u663E\u65F6\u624D\u7B80\u8981\u63D0\u5230\u5173\u952E\u7B26\u53F7\uFF0C\u4E0D\u8981\u9010\u4E2A\u7F57\u5217\u7B26\u53F7\u542B\u4E49\uFF0C\u4E5F\u4E0D\u8981\u5C55\u5F00\u63A8\u5BFC\u3002",
   "inline-math": "\u8FD9\u662F\u53E5\u5B50\u4E2D\u7684\u884C\u5185\u516C\u5F0F\u3002\u53EA\u628A\u5B83\u5FF5\u6210\u901A\u987A\u7684\u4E2D\u6587\u77ED\u8BED\uFF08\u4F8B\u5982\u300C\u4E8C\u5206\u4E4B\u4E00 m v \u5E73\u65B9\u300D\u300Cv \u7B49\u4E8E v \u96F6\u52A0 a t\u300D\uFF09\uFF0C\u4E0D\u8981\u5C55\u5F00\u89E3\u91CA\uFF0C\u4E0D\u8981\u8865\u5145\u5B9A\u4E49\uFF0C\u4E0D\u8981\u52A0\u63A8\u5BFC\u3002",
@@ -14043,7 +14101,15 @@ var SYSTEM_PROMPT = [
   "\u2200 \u4EFB\u610F\uFF1B\u2203 \u5B58\u5728\uFF1B\u2211 \u6C42\u548C\uFF1B\u220F \u8FDE\u4E58\uFF1B\u222B \u79EF\u5206\uFF1B\u2202 \u504F\u5BFC\uFF1B\u2207 \u68AF\u5EA6\uFF1B\u2261 \u6052\u7B49\u4E8E\uFF1B\u2245 \u540C\u6784\uFF1B\u2248 \u7EA6\u7B49\u4E8E\uFF1B",
   "\u2260 \u4E0D\u7B49\u4E8E\uFF1B! \u9636\u4E58\uFF1B|a| \u7EDD\u5BF9\u503C\uFF1BP(A|B) \u5728 B \u53D1\u751F\u7684\u6761\u4EF6\u4E0B A \u7684\u6982\u7387\u3002",
   "18. \u540C\u4E00\u7B26\u53F7\u5728\u4E0D\u540C\u8BED\u5883\u542B\u4E49\u4E0D\u540C\uFF08s \u79D2\u6216\u4F4D\u79FB\u3001T \u5468\u671F\u6216\u6E29\u5EA6\u3001R \u7535\u963B\u6216\u534A\u5F84\uFF09\uFF0C",
-  "\u4E00\u5F8B\u4EE5 segment.sentence \u4E0E context.symbols \u4E3A\u51C6\uFF0C\u4E0D\u8981\u53EA\u6309\u9ED8\u8BA4\u542B\u4E49\u5FF5\u3002"
+  "\u4E00\u5F8B\u4EE5 segment.sentence \u4E0E context.symbols \u4E3A\u51C6\uFF0C\u4E0D\u8981\u53EA\u6309\u9ED8\u8BA4\u542B\u4E49\u5FF5\u3002",
+  "",
+  "\u516D\u3001\u6E10\u8FD1\u590D\u6742\u5EA6\uFF0C\u4EE5\u53CA\u884C\u5185\u516C\u5F0F\u7684\u8FB9\u754C\uFF1A",
+  "19. O(...) \u8BFB\u300C\u5927 O\uFF0C\u2026\u300D\uFF1AO(n^2) \u8BFB\u300C\u5927 O\uFF0Cn \u7684\u5E73\u65B9\u300D\uFF0CO(n) \u8BFB\u300C\u5927 O\uFF0Cn\u300D\uFF0C",
+  "O(n log n) \u8BFB\u300C\u5927 O\uFF0Cn \u4E58 log n\u300D\uFF08log \u8BFB\u82F1\u6587\u5355\u8BCD\uFF0C\u4E0D\u8981\u62C6\u6210\u5B57\u6BCD\uFF09\uFF0CO(1) \u8BFB\u300C\u5927 O\uFF0C\u5E38\u6570\u300D\uFF0C",
+  "O(n log k) \u8BFB\u300C\u5927 O\uFF0Cn \u4E58 log k\u300D\u3002\u03A9(...) \u8BFB\u300C\u5927 Omega\uFF0C\u2026\u300D\uFF0C\u0398(...) \u8BFB\u300C\u5927 Theta\uFF0C\u2026\u300D\u3002",
+  "20. \u4E0D\u8981\u8F93\u51FA\u300C\u5DE6\u62EC\u53F7\u300D\u300C\u53F3\u62EC\u53F7\u300D\u300C\u5DE6\u65B9\u62EC\u53F7\u300D\u300C\u53F3\u65B9\u62EC\u53F7\u300D\u8FD9\u7C7B\u9010\u7B26\u53F7\u8BFB\u6CD5\uFF1B\u62EC\u53F7\u91CC\u7684\u5185\u5BB9\u76F4\u63A5\u8FDE\u7740\u5FF5\u3002",
+  "21. \u884C\u5185\u516C\u5F0F\u53EA\u5FF5\u516C\u5F0F\u672C\u8EAB\uFF1A\u7EDD\u4E0D\u8981\u590D\u8FF0 segment.sentence\uFF08\u6574\u53E5\u7684\u5176\u4F59\u90E8\u5206\u5DF2\u7ECF\u5728\u6B63\u6587\u91CC\u5FF5\u8FC7\u4E86\uFF09\uFF0C",
+  "\u4E5F\u4E0D\u8981\u5E26\u4E0A\u516C\u5F0F\u524D\u540E\u7684\u8BF4\u660E\u8BCD\uFF08\u4F8B\u5982\u300C\u5E73\u5747/\u6700\u574F\u300D\u300C\u6700\u597D\u300D\u300C\u5982\u679C\u300D\u300C\u5F53\u300D\uFF09\u3002\u53EA\u8F93\u51FA\u8FD9\u4E2A\u516C\u5F0F\u7684\u8BFB\u6CD5\u3002"
 ].join("\n");
 function extractNumbers(text5) {
   const out = [];
@@ -14167,6 +14233,46 @@ function contextEchoRatio(speech, before) {
   for (const g of a) if (b.has(g)) hit++;
   return hit / a.size;
 }
+function normalizeForEcho(s) {
+  return String(s).replace(/[\s，。、；：？！…—·,.!?;:'"()（）\[\]【】《》<>「」『』""''+\-=*/\\|^_~`]/g, "");
+}
+function sentenceEchoRatio(speech, sentence, formula) {
+  const sentenceNorm = normalizeForEcho(sentence);
+  if (!sentenceNorm) return 0;
+  const formulaNorm = normalizeForEcho(formula);
+  const prose = formulaNorm ? sentenceNorm.split(formulaNorm).join("") : sentenceNorm;
+  if (prose.length < 6) return 0;
+  const hayRaw = normalizeForEcho(speech);
+  if (!hayRaw) return 0;
+  const a = prose;
+  const b = hayRaw.length > 400 ? hayRaw.slice(0, 400) : hayRaw;
+  let prev = new Uint16Array(b.length + 1);
+  let cur = new Uint16Array(b.length + 1);
+  for (let i = 0; i < a.length; i++) {
+    for (let j = 0; j < b.length; j++) {
+      cur[j + 1] = a[i] === b[j] ? prev[j] + 1 : Math.max(prev[j + 1], cur[j]);
+    }
+    const t = prev;
+    prev = cur;
+    cur = t;
+    cur.fill(0);
+  }
+  return prev[b.length] / a.length;
+}
+function prefixEcho(speech, sentence, formula) {
+  const sentenceNorm = normalizeForEcho(sentence);
+  const formulaNorm = normalizeForEcho(formula);
+  if (!sentenceNorm || !formulaNorm) return false;
+  const idx = sentenceNorm.indexOf(formulaNorm);
+  if (idx < 3) return false;
+  const pre = sentenceNorm.slice(0, idx);
+  const hay = normalizeForEcho(speech);
+  if (pre.length < 3 || !hay) return false;
+  for (let i = 0; i + 3 <= pre.length; i++) {
+    if (hay.includes(pre.slice(i, i + 3))) return true;
+  }
+  return false;
+}
 function parseSpeechResponse(raw) {
   const text5 = String(raw).replace(/^\s*\x60\x60\x60[^\n]*\n?/, "").replace(/\n?\x60\x60\x60\s*$/, "").trim();
   const candidates = [text5];
@@ -14275,6 +14381,10 @@ var SpeechRewriter = class _SpeechRewriter {
       const echoRef = sentence.length > before.length ? sentence : before;
       if (echoRef.length >= 40 && parsed.speech.length >= 40 && contextEchoRatio(parsed.speech, echoRef) >= 0.6) {
         return null;
+      }
+      if (req.kind === "inline-math" && sentence) {
+        if (prefixEcho(parsed.speech, sentence, text5)) return null;
+        if (sentenceEchoRatio(parsed.speech, sentence, text5) >= 0.7) return null;
       }
       if (!verifyNumbers(text5, parsed.speech)) return null;
       const stored = parsed.symbols.length ? { text: parsed.speech, symbols: parsed.symbols } : { text: parsed.speech };

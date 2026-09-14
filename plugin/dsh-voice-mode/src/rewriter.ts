@@ -74,7 +74,7 @@ export interface RewriteResult {
 }
 
 /** 提示词/行为版本：改变提示词、协议或后处理时递增；缓存键含它，避免跨版本复用旧讲稿。 */
-const PROMPT_VERSION = 'sp5'
+const PROMPT_VERSION = 'sp6'
 
 /** 各片段类型的任务说明（放进请求 JSON 的 task 字段）。 */
 const KIND_INSTRUCTIONS: Record<RewriteKind, string> = {
@@ -142,6 +142,14 @@ const SYSTEM_PROMPT = [
   '≠ 不等于；! 阶乘；|a| 绝对值；P(A|B) 在 B 发生的条件下 A 的概率。',
   '18. 同一符号在不同语境含义不同（s 秒或位移、T 周期或温度、R 电阻或半径），',
   '一律以 segment.sentence 与 context.symbols 为准，不要只按默认含义念。',
+  '',
+  '六、渐近复杂度，以及行内公式的边界：',
+  '19. O(...) 读「大 O，…」：O(n^2) 读「大 O，n 的平方」，O(n) 读「大 O，n」，',
+  'O(n log n) 读「大 O，n 乘 log n」（log 读英文单词，不要拆成字母），O(1) 读「大 O，常数」，',
+  'O(n log k) 读「大 O，n 乘 log k」。Ω(...) 读「大 Omega，…」，Θ(...) 读「大 Theta，…」。',
+  '20. 不要输出「左括号」「右括号」「左方括号」「右方括号」这类逐符号读法；括号里的内容直接连着念。',
+  '21. 行内公式只念公式本身：绝不要复述 segment.sentence（整句的其余部分已经在正文里念过了），',
+  '也不要带上公式前后的说明词（例如「平均/最坏」「最好」「如果」「当」）。只输出这个公式的读法。',
 ].join('\n')
 
 /** 抽取需要保安全的数字 token。 */
@@ -264,6 +272,57 @@ export function contextEchoRatio(speech: string, before: string): number {
   let hit = 0
   for (const g of a) if (b.has(g)) hit++
   return hit / a.size
+}
+
+/** 回显比对归一化：去掉空白与常见标点，只留下字母/数字/汉字。 */
+function normalizeForEcho(s: string): string {
+  return String(s).replace(/[\s，。、；：？！…—·,.!?;:'"()（）\[\]【】《》<>「」『』""''+\-=*/\\|^_~`]/g, '')
+}
+
+/**
+ * 行内公式的「复述整句」判定：把整句里属于该公式的文本剥掉，剩下的散文骨架与
+ * 改写稿做最长公共子序列，覆盖率越高越像"把整句念了一遍"。
+ * 用 LCS 而不是 n-gram：公式改写成中文字形后 n-gram 会对不上（O(n^2) → O(n 平方)），
+ * 但「平均/最坏…最好…」这类散文骨架仍会被 LCS 抓住。
+ */
+export function sentenceEchoRatio(speech: string, sentence: string, formula: string): number {
+  const sentenceNorm = normalizeForEcho(sentence)
+  if (!sentenceNorm) return 0
+  const formulaNorm = normalizeForEcho(formula)
+  const prose = formulaNorm ? sentenceNorm.split(formulaNorm).join('') : sentenceNorm
+  if (prose.length < 6) return 0
+  const hayRaw = normalizeForEcho(speech)
+  if (!hayRaw) return 0
+  const a = prose
+  const b = hayRaw.length > 400 ? hayRaw.slice(0, 400) : hayRaw
+  let prev = new Uint16Array(b.length + 1)
+  let cur = new Uint16Array(b.length + 1)
+  for (let i = 0; i < a.length; i++) {
+    for (let j = 0; j < b.length; j++) {
+      cur[j + 1] = a[i] === b[j] ? prev[j] + 1 : Math.max(prev[j + 1], cur[j])
+    }
+    const t = prev
+    prev = cur
+    cur = t
+    cur.fill(0)
+  }
+  return prev[b.length] / a.length
+}
+
+/** 复述了公式前面那段说明词（例如把「平均/最坏」也念了出来）——短句也适用。 */
+export function prefixEcho(speech: string, sentence: string, formula: string): boolean {
+  const sentenceNorm = normalizeForEcho(sentence)
+  const formulaNorm = normalizeForEcho(formula)
+  if (!sentenceNorm || !formulaNorm) return false
+  const idx = sentenceNorm.indexOf(formulaNorm)
+  if (idx < 3) return false
+  const pre = sentenceNorm.slice(0, idx)
+  const hay = normalizeForEcho(speech)
+  if (pre.length < 3 || !hay) return false
+  for (let i = 0; i + 3 <= pre.length; i++) {
+    if (hay.includes(pre.slice(i, i + 3))) return true
+  }
+  return false
 }
 
 export interface ParsedSpeech {
@@ -403,6 +462,12 @@ export class SpeechRewriter {
       const echoRef = sentence.length > before.length ? sentence : before
       if (echoRef.length >= 40 && parsed.speech.length >= 40 && contextEchoRatio(parsed.speech, echoRef) >= 0.6) {
         return null
+      }
+      // 行内公式的复述守卫：旧实现被 echoRef.length >= 40 短路，短句完全没保护。
+      // 模型会把整句原样吐回来（"平均/最坏 O(n 平方)，最好 O(n)。"），导致朗读重复。
+      if (req.kind === 'inline-math' && sentence) {
+        if (prefixEcho(parsed.speech, sentence, text)) return null
+        if (sentenceEchoRatio(parsed.speech, sentence, text) >= 0.7) return null
       }
       if (!verifyNumbers(text, parsed.speech)) return null
 

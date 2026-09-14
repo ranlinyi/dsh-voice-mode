@@ -69,5 +69,32 @@ t('text{} 原样保留', () => {
   assert.equal(latexToSpeech('\\text{速度}'), '速度')
 })
 
+t('渐近复杂度：O/Ω/Θ 读「大 O…」，不再逐符号念括号', () => {
+  assert.equal(latexToSpeech('O(n^2)'), '大 O，n 的平方')
+  assert.equal(latexToSpeech('O(n)'), '大 O，n')
+  assert.equal(latexToSpeech('O(n\\log n)'), '大 O，n 乘 log n')
+  assert.equal(latexToSpeech('O(1)'), '大 O，常数')
+  assert.equal(latexToSpeech('O(n\\log k)'), '大 O，n 乘 log k')
+  assert.equal(latexToSpeech('\\Omega(n\\log n)'), '大 Omega，n 乘 log n')
+  assert.equal(latexToSpeech('\\Theta(n^2)'), '大 Theta，n 的平方')
+  for (const s of ['O(n^2)', 'O(n\\log n)', '\\Omega(n\\log n)']) {
+    const out = latexToSpeech(s)
+    assert.ok(!out.includes('左括号') && !out.includes('右括号'), s + ' -> ' + out)
+  }
+})
+
+t('复杂度里的 log 读英文，不读「对数」', () => {
+  assert.ok(latexToSpeech('O(n\\log n)').includes('log n'))
+  // 非复杂度语境仍是「对数」
+  assert.ok(latexToSpeech('\\log x').includes('对数'))
+})
+
+t('排版性空白命令被忽略（少念出感叹号/反斜杠）', () => {
+  const out = latexToSpeech('n \\lesssim 16\\!\\sim\\!32')
+  assert.ok(out.includes('小于等于'), out)
+  assert.ok(!out.includes('!'), out)
+  assert.ok(!out.includes('lesssim'), out)
+})
+
 console.log('\nmath：' + passed + ' 项通过')
 rmSync(tmp, { recursive: true, force: true })
