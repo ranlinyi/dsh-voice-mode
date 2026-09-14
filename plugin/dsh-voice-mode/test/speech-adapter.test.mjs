@@ -231,6 +231,29 @@ await t('整句出稿失败：回退逐片段（公式走确定性读法）', as
   assert.ok(text.includes('n 的平方'), text)
 })
 
+await t('混合公式：同一行的 $$…$$ 被当行内公式，整句一次出稿', async () => {
+  const calls = []
+  const fake = { rewrite: async (req) => { calls.push(req); return { text: '【整句】', cached: false } } }
+  await run({ enabled: true, mathMode: 'model', rewriter: fake }, ['当 $x \\to a$ 时，$$f(x) \\to L$$ 成立。\n'])
+  assert.equal(calls.length, 1, JSON.stringify(calls.map((c) => c.kind)))
+  assert.equal(calls[0].kind, 'sentence')
+  assert.ok(calls[0].text.includes('$f(x) \\to L$'), calls[0].text)
+})
+
+await t('混合公式：半句 + 独立行间块 → sentence + display-math 分开', async () => {
+  const kinds = []
+  const fake = { rewrite: async (req) => { kinds.push(req.kind); return { text: '稿', cached: false } } }
+  await run({ enabled: true, mathMode: 'model', rewriter: fake }, ['当 $x \\to a$ 时，\n$$\nf(x) \\to L\n$$\n成立。\n'])
+  assert.deepEqual(kinds, ['sentence', 'display-math'])
+})
+
+await t('混合公式：纯公式单元走公式路径，不按"正文段"发问', async () => {
+  const kinds = []
+  const fake = { rewrite: async (req) => { kinds.push(req.kind); return { text: '稿', cached: false } } }
+  await run({ enabled: true, mathMode: 'model', rewriter: fake }, ['由 $E=mc^2$ 得\n$$E_0 = mc^2$$\n'])
+  assert.deepEqual(kinds, ['sentence', 'inline-math'])
+})
+
 await t('段落/标题停顿：标题单独成句，停顿挂到下一句', async () => {
   const pairs = []
   const adapter = new SpeechAdapter({

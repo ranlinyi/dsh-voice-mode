@@ -220,7 +220,11 @@ export class SpeechAdapter {
       return
     }
     for (const sent of splitSegmentSentences(group)) {
-      if (sent.some((s) => s.kind === 'inline-math')) this.scheduleSentence(sent)
+      const hasMath = sent.some((s) => s.kind === 'inline-math')
+      // 只有"公式 + 正文"的混合单元才整段交给模型；纯公式单元（例如单独一行的
+      // $$x$$——remark 会把它解析成行内公式）仍走公式路径，避免用"正文段"的任务去问它。
+      const hasProse = sent.some((s) => s.kind === 'prose' && s.text.trim() !== '')
+      if (hasMath && hasProse) this.scheduleSentence(sent)
       else for (const seg of sent) this.schedule(seg)
     }
   }
