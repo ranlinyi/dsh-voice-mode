@@ -1297,6 +1297,12 @@ var zh = {
   descAzureKeyRef: "Azure \u5BC6\u94A5\u7684\u51ED\u636E\u5F15\u7528\u540D\uFF08\u5982 AZURE_SPEECH_KEY\uFF09\uFF1B\u771F\u5B9E\u5BC6\u94A5\u5199\u8FDB DSH \u51ED\u636E\u5E93\uFF0C\u914D\u7F6E\u6587\u4EF6\u53EA\u7559\u5F15\u7528\u540D",
   descAzureSecret: "\u5728\u4E0B\u65B9\u7C98\u8D34 Azure \u8BA2\u9605\u5BC6\u94A5\u5E76\u4FDD\u5B58\uFF1A\u5BBF\u4E3B\u5199\u5165 DSH \u51ED\u636E\u5E93\uFF0C\u660E\u6587\u4E0D\u843D\u914D\u7F6E\u6587\u4EF6",
   descAzurePhonemes: "\u591A\u97F3\u5B57\u62FC\u97F3\u8868\uFF1A\u6BCF\u884C\u300C\u8BCD => \u62FC\u97F3\u300D\uFF08\u5982 \u884C => hang2\u3001\u94F6\u884C => yin2 hang2\uFF09\uFF0C# \u8D77\u9996\u4E3A\u6CE8\u91CA\uFF1B\u7ECF SSML <phoneme> \u7CBE\u786E\u53D1\u97F3\uFF0C\u4EC5 Azure \u5F15\u64CE\u751F\u6548",
+  descUsageStats: "\u8BED\u97F3\u6539\u7F16\u7AD9\u8C03\u7528\u5916\u90E8\u6539\u5199\u6A21\u578B\u7D2F\u8BA1\u6D88\u8017\u7684 token\uFF08\u4EC5\u8FDB\u7A0B\u5185\u7D2F\u8BA1\uFF0C\u91CD\u542F\u6E05\u96F6\uFF09",
+  usageRequests: "\u8BF7\u6C42",
+  usagePrompt: "\u8F93\u5165",
+  usageCompletion: "\u8F93\u51FA",
+  usageTotal: "\u5408\u8BA1",
+  usageReset: "\u6E05\u96F6",
   descVoiceKokoro: "Kokoro \u4E2D\u82F1\u97F3\u8272\uFF08103 \u4E2A\u5168\u90E8\u5217\u51FA\uFF0C\u4E0B\u62C9\u9009\u6216 \u25C0\u25B6 \u5207\u6362\uFF1B48-51 \u4E2D\u6587\u540D\uFF0C\u5176\u4F59\u6309\u7F16\u53F7+\u5B9E\u6D4B\u6027\u522B\u6807\u6CE8\uFF0C\u4E2D\u82F1\u6DF7\u8BFB\u5747\u53EF\uFF09",
   descRate: "\u6717\u8BFB\u8BED\u901F\u500D\u7387\uFF080.5 \u6162\u901F \uFF5E 2.0 \u5FEB\u901F\uFF0C1.0 \u6B63\u5E38\uFF09",
   descInterrupt: "\u53D1\u58F0\u6253\u65AD\u7075\u654F\u5EA6\uFF080 \u9AD8\u95E8\u69DB / 1 \u4E2D / 2 \u4F4E\uFF1B\u53D1\u58F0\u786E\u8BA4\u7EA6 0.3/0.2/0.1 \u79D2\uFF09",
@@ -1470,6 +1476,12 @@ var en = {
   descAzureKeyRef: "Credential reference name for the Azure key (e.g. AZURE_SPEECH_KEY); the secret is stored in the DSH credential store, never in config",
   descAzureSecret: "Paste the Azure subscription key below and save: the host stores it in the DSH credential store; the settings file keeps only the reference name",
   descAzurePhonemes: 'Polyphone table: one rule per line, "word => pinyin" (e.g. \u884C => hang2, \u94F6\u884C => yin2 hang2); # starts a comment. Applied via SSML <phoneme>, Azure engine only',
+  descUsageStats: "Cumulative tokens consumed by the speech adaptation station external rewrite model (in-memory only; resets on restart)",
+  usageRequests: "Requests",
+  usagePrompt: "Prompt",
+  usageCompletion: "Completion",
+  usageTotal: "Total",
+  usageReset: "Reset",
   descVoiceKokoro: "Kokoro zh-en voices (103; \u25C0\u25B6 to cycle; 48-51 named Chinese, others numbered with measured gender; mixed zh-en supported)",
   descRate: "Speech rate (0.5 slow \u2013 2.0 fast, 1.0 normal)",
   descInterrupt: "Interrupt sensitivity (0 high barrier / 1 medium / 2 low; ~0.3/0.2/0.1 s speech confirmation)",
@@ -1635,7 +1647,8 @@ var FIELD_LABELS = {
   azureEndpoint: "Azure \u7AEF\u70B9",
   azureKeyRef: "Azure \u5BC6\u94A5\u5F15\u7528",
   azureSecret: "\u5199\u5165 Azure \u5BC6\u94A5",
-  azurePhonemes: "Azure \u591A\u97F3\u5B57\u62FC\u97F3\u8868"
+  azurePhonemes: "Azure \u591A\u97F3\u5B57\u62FC\u97F3\u8868",
+  usageStats: "\u7D2F\u8BA1 token \u6D88\u8017"
 };
 var setHeader = {
   appearance: "none",
@@ -2023,6 +2036,73 @@ function CredentialKeyField({ score, field, refValue, defaultRef }) {
     ),
     status ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { fontSize: 11, color: t2.term }, children: status }) : null
   ] });
+}
+function TokenUsageInline() {
+  const [u, setU] = (0, import_react.useState)(null);
+  const [busy, setBusy] = (0, import_react.useState)(false);
+  const load = async () => {
+    try {
+      const res = await fetch(location.origin + BASE_PATH + "/usage");
+      if (res.ok) setU(await res.json());
+    } catch {
+    }
+  };
+  (0, import_react.useEffect)(() => {
+    void load();
+    const timer = setInterval(() => void load(), 5e3);
+    return () => clearInterval(timer);
+  }, []);
+  const reset = async () => {
+    setBusy(true);
+    try {
+      await fetch(location.origin + BASE_PATH + "/usage", { method: "POST" });
+      await load();
+    } catch {
+    } finally {
+      setBusy(false);
+    }
+  };
+  const n = (x) => Number(x ?? 0).toLocaleString("en-US");
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "usageStats", desc: t("descUsageStats"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { style: { fontSize: 12, color: t2.label }, children: [
+      t("usageRequests"),
+      " ",
+      n(u?.requests),
+      " \xB7 ",
+      t("usagePrompt"),
+      " ",
+      n(u?.promptTokens),
+      " \xB7 ",
+      t("usageCompletion"),
+      " ",
+      n(u?.completionTokens),
+      " \xB7 ",
+      t("usageTotal"),
+      " ",
+      n(u?.totalTokens)
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+      "button",
+      {
+        type: "button",
+        disabled: busy,
+        onClick: () => void reset(),
+        style: {
+          appearance: "none",
+          border: "1px solid " + t2.border,
+          background: t2.bgOpen,
+          color: t2.label,
+          borderRadius: 8,
+          padding: "3px 10px",
+          font: "inherit",
+          fontSize: 11,
+          cursor: busy ? "default" : "pointer",
+          opacity: busy ? 0.6 : 1
+        },
+        children: t("usageReset")
+      }
+    )
+  ] }) });
 }
 function SelectField({
   score,
@@ -2695,7 +2775,8 @@ function VoiceSettingsCard({ scope }) {
         ) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "guardAllowRules", desc: t("descGuardAllowRules"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextAreaField, { score: scope, field: "guardAllowRules", value: value.guardAllowRules ?? "", placeholder: "\u5927 O\uFF1Bseg:/^O\\(/\uFF1B/^\u5927 Omega/", rows: 3 }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "wholeSentenceMath", desc: t("descWholeSentenceMath"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "checkbox", checked: value.wholeSentenceMath !== false, onChange: (e) => void scope.set("wholeSentenceMath", e.target.checked) }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "blockPauseMs", desc: t("descBlockPause"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NumberField, { score: scope, field: "blockPauseMs", value: value.blockPauseMs ?? 350, min: 0, max: 3e3, step: 50 }) })
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "blockPauseMs", desc: t("descBlockPause"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(NumberField, { score: scope, field: "blockPauseMs", value: value.blockPauseMs ?? 350, min: 0, max: 3e3, step: 50 }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TokenUsageInline, {})
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Section, { title: t("secModel"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "modelHost", desc: t("descModelHost"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SelectField, { score: scope, field: "modelHost", value: value.modelHost ?? "", options: HOST_OPTIONS, placeholder: "https://..." }) }) }),
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { style: { fontSize: 12, color: t2.term, lineHeight: "18px", padding: "4px 0 8px" }, children: t("settingsEffectiveNote") }),
@@ -2721,7 +2802,7 @@ var TELEMETRY_VIEW = [
   { stage: "first-tts-chunk", key: "telFirstChunk" },
   { stage: "first-audio-played", key: "telFirstPlayed" }
 ];
-var BUILD_TAG = "60f1e79";
+var BUILD_TAG = "6864c90";
 var TELEMETRY_FLAG = "dsh-voice-mode-adaptation.telemetry";
 var telemetryEnabled = typeof localStorage !== "undefined" && localStorage.getItem(TELEMETRY_FLAG) === "1";
 console.log("[dsh-voice] build=" + BUILD_TAG);

@@ -14589,6 +14589,38 @@ function anyMatch(rules, text5) {
   }
   return false;
 }
+var usageStats = {
+  requests: 0,
+  requestsWithoutUsage: 0,
+  promptTokens: 0,
+  completionTokens: 0,
+  totalTokens: 0
+};
+function rewriteUsage() {
+  return { ...usageStats };
+}
+function resetRewriteUsage() {
+  usageStats.requests = 0;
+  usageStats.requestsWithoutUsage = 0;
+  usageStats.promptTokens = 0;
+  usageStats.completionTokens = 0;
+  usageStats.totalTokens = 0;
+}
+function recordUsage(usage) {
+  usageStats.requests += 1;
+  const u = usage ?? null;
+  if (!u || typeof u !== "object") {
+    usageStats.requestsWithoutUsage += 1;
+    return;
+  }
+  const num = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
+  const p = num(u.prompt_tokens);
+  const c = num(u.completion_tokens);
+  const t = num(u.total_tokens) || p + c;
+  usageStats.promptTokens += p;
+  usageStats.completionTokens += c;
+  usageStats.totalTokens += t;
+}
 var PROMPT_VERSION = "sp10";
 var KIND_INSTRUCTIONS = {
   "display-math": "\u8FD9\u662F\u72EC\u7ACB\u5C55\u793A\u7684\u6570\u5B66\u516C\u5F0F\u3002\u7528\u4E00\u4E24\u53E5\u8BDD\u8BF4\u660E\u5B83\u8868\u8FBE\u7684\u5173\u7CFB\uFF08\u67D0\u4E2A\u91CF\u7B49\u4E8E\u4EC0\u4E48\u3001\u968F\u4EC0\u4E48\u53D8\u5316\uFF09\uFF1B\u53EA\u6709\u5728\u542B\u4E49\u786E\u5B9E\u4E0D\u660E\u663E\u65F6\u624D\u7B80\u8981\u63D0\u5230\u5173\u952E\u7B26\u53F7\uFF0C\u4E0D\u8981\u9010\u4E2A\u7F57\u5217\u7B26\u53F7\u542B\u4E49\uFF0C\u4E5F\u4E0D\u8981\u5C55\u5F00\u63A8\u5BFC\u3002",
@@ -15003,6 +15035,7 @@ var SpeechRewriter = class _SpeechRewriter {
     });
     if (!res.ok) return { status: res.status, content: null };
     const data = await res.json();
+    recordUsage(data && data.usage);
     const content3 = data && data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : void 0;
     return { status: res.status, content: typeof content3 === "string" ? content3 : null };
   }
@@ -16405,6 +16438,26 @@ function apply(ctx, config) {
             respondJson2(res, 500, { error: "store failed: " + String(e?.message ?? e) });
           }
         });
+      }
+    })
+  );
+  ctx.effect(
+    () => ctx.webServer.register({
+      kind: "exact",
+      path: base + "/usage",
+      handler: (req, res) => {
+        if (denyNonLoopback(req, res)) return;
+        if (denyCrossOrigin(req, res)) return;
+        if (req.method === "POST") {
+          if (!limiter.hit("usage-reset:" + (req.socket.remoteAddress ?? "unknown"), 10, 6e4)) {
+            respondJson2(res, 429, { error: "rate limited" });
+            return;
+          }
+          resetRewriteUsage();
+          respondJson2(res, 200, { ok: true, ...rewriteUsage() });
+          return;
+        }
+        respondJson2(res, 200, rewriteUsage());
       }
     })
   );
