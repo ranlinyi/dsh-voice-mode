@@ -1287,10 +1287,16 @@ var zh = {
   descVoice: "Edge \u4E91\u7AEF\u97F3\u8272\uFF08\u8FDB\u5165\u65F6\u81EA\u52A8\u52A0\u8F7D\u5FAE\u8F6F\u5168\u90E8\u97F3\u8272\uFF0C\u5E38\u7528\u4E2D\u6587\u97F3\u8272\u7F6E\u9876\uFF0C\u4E0B\u62C9\u6216 \u25C0\u25B6 \u9009\uFF1B\u4E5F\u53EF\u300C\u81EA\u5B9A\u4E49\u300D\u586B ShortName\uFF09",
   descVoiceLocal: "\u672C\u5730\u97F3\u8272\uFF08vits \u4E94\u4E2A\u8BF4\u8BDD\u4EBA\u5168\u90E8\u5217\u51FA\uFF0C\u4E0B\u62C9\u9009\u6216 \u25C0\u25B6 \u5207\u6362\uFF1B\u65E0\u9700\u81EA\u5B9A\u4E49\uFF09",
   ttsEngine: "\u6717\u8BFB\u5F15\u64CE",
-  descTtsEngine: "\u672C\u5730 VITS\uFF08\u7EAF\u4E2D\u6587\uFF09/ \u672C\u5730 Kokoro\uFF08\u4E2D\u82F1\u5747\u53EF\uFF09/ Edge \u4E91\u7AEF\uFF08\u97F3\u8D28\u6700\u81EA\u7136\uFF0C\u6587\u672C\u4E0A\u5FAE\u8F6F\uFF09",
+  descTtsEngine: "\u672C\u5730 VITS\uFF08\u7EAF\u4E2D\u6587\uFF09/ \u672C\u5730 Kokoro\uFF08\u4E2D\u82F1\u5747\u53EF\uFF09/ Edge \u4E91\u7AEF\uFF08\u97F3\u8D28\u6700\u81EA\u7136\uFF0C\u6587\u672C\u4E0A\u5FAE\u8F6F\uFF09/ Azure \u4E91\u7AEF\uFF08\u4ED8\u8D39\uFF0C\u652F\u6301\u97F3\u7D20\u7EA7\u591A\u97F3\u5B57\uFF09",
   engineVits: "\u672C\u5730 VITS",
   engineKokoro: "\u672C\u5730\u4E2D\u82F1",
   engineEdge: "Edge \u4E91\u7AEF",
+  engineAzure: "Azure \u4E91\u7AEF\uFF08\u4ED8\u8D39\uFF09",
+  descVoiceAzure: "Azure \u97F3\u8272\uFF08\u4E0E Edge \u540C\u540D ShortName\uFF0C\u6CBF\u7528\u4E0B\u65B9\u97F3\u8272\u9009\u62E9\uFF1B\u6587\u672C\u53D1\u9001\u5230\u4F60\u7684 Azure \u8BED\u97F3\u8D44\u6E90\uFF09",
+  descAzureEndpoint: "Azure \u8BED\u97F3\u8D44\u6E90\u7AEF\u70B9\uFF1A\u586B\u533A\u57DF\u540D\uFF08\u5982 eastasia\uFF09\u6216\u5B8C\u6574\u94FE\u63A5\uFF08https://<region>.tts.speech.microsoft.com\uFF09",
+  descAzureKeyRef: "Azure \u5BC6\u94A5\u7684\u51ED\u636E\u5F15\u7528\u540D\uFF08\u5982 AZURE_SPEECH_KEY\uFF09\uFF1B\u771F\u5B9E\u5BC6\u94A5\u5199\u8FDB DSH \u51ED\u636E\u5E93\uFF0C\u914D\u7F6E\u6587\u4EF6\u53EA\u7559\u5F15\u7528\u540D",
+  descAzureSecret: "\u5728\u4E0B\u65B9\u7C98\u8D34 Azure \u8BA2\u9605\u5BC6\u94A5\u5E76\u4FDD\u5B58\uFF1A\u5BBF\u4E3B\u5199\u5165 DSH \u51ED\u636E\u5E93\uFF0C\u660E\u6587\u4E0D\u843D\u914D\u7F6E\u6587\u4EF6",
+  descAzurePhonemes: "\u591A\u97F3\u5B57\u62FC\u97F3\u8868\uFF1A\u6BCF\u884C\u300C\u8BCD => \u62FC\u97F3\u300D\uFF08\u5982 \u884C => hang2\u3001\u94F6\u884C => yin2 hang2\uFF09\uFF0C# \u8D77\u9996\u4E3A\u6CE8\u91CA\uFF1B\u7ECF SSML <phoneme> \u7CBE\u786E\u53D1\u97F3\uFF0C\u4EC5 Azure \u5F15\u64CE\u751F\u6548",
   descVoiceKokoro: "Kokoro \u4E2D\u82F1\u97F3\u8272\uFF08103 \u4E2A\u5168\u90E8\u5217\u51FA\uFF0C\u4E0B\u62C9\u9009\u6216 \u25C0\u25B6 \u5207\u6362\uFF1B48-51 \u4E2D\u6587\u540D\uFF0C\u5176\u4F59\u6309\u7F16\u53F7+\u5B9E\u6D4B\u6027\u522B\u6807\u6CE8\uFF0C\u4E2D\u82F1\u6DF7\u8BFB\u5747\u53EF\uFF09",
   descRate: "\u6717\u8BFB\u8BED\u901F\u500D\u7387\uFF080.5 \u6162\u901F \uFF5E 2.0 \u5FEB\u901F\uFF0C1.0 \u6B63\u5E38\uFF09",
   descInterrupt: "\u53D1\u58F0\u6253\u65AD\u7075\u654F\u5EA6\uFF080 \u9AD8\u95E8\u69DB / 1 \u4E2D / 2 \u4F4E\uFF1B\u53D1\u58F0\u786E\u8BA4\u7EA6 0.3/0.2/0.1 \u79D2\uFF09",
@@ -1454,10 +1460,16 @@ var en = {
   descVoice: "Edge cloud voices (auto-loads all Microsoft voices; common Chinese voices pinned on top; \u25C0\u25B6 or dropdown; custom ShortName allowed)",
   descVoiceLocal: "Local voice (vits, all 5 speakers listed; dropdown or \u25C0\u25B6; no custom needed)",
   ttsEngine: "Read-aloud engine",
-  descTtsEngine: "Local VITS (Chinese only) / Local Kokoro (Chinese + English) / Edge cloud (most natural, text sent to Microsoft)",
+  descTtsEngine: "Local VITS (Chinese only) / Local Kokoro (Chinese + English) / Edge cloud (most natural, text sent to Microsoft) / Azure cloud (paid, phoneme-level polyphone control)",
   engineVits: "Local VITS",
   engineKokoro: "Local zh-en",
   engineEdge: "Edge cloud",
+  engineAzure: "Azure cloud (paid)",
+  descVoiceAzure: "Azure voice (same ShortName as Edge; text is sent to your Azure Speech resource)",
+  descAzureEndpoint: "Azure Speech endpoint: region name (e.g. eastasia) or full URL (https://<region>.tts.speech.microsoft.com)",
+  descAzureKeyRef: "Credential reference name for the Azure key (e.g. AZURE_SPEECH_KEY); the secret is stored in the DSH credential store, never in config",
+  descAzureSecret: "Paste the Azure subscription key below and save: the host stores it in the DSH credential store; the settings file keeps only the reference name",
+  descAzurePhonemes: 'Polyphone table: one rule per line, "word => pinyin" (e.g. \u884C => hang2, \u94F6\u884C => yin2 hang2); # starts a comment. Applied via SSML <phoneme>, Azure engine only',
   descVoiceKokoro: "Kokoro zh-en voices (103; \u25C0\u25B6 to cycle; 48-51 named Chinese, others numbered with measured gender; mixed zh-en supported)",
   descRate: "Speech rate (0.5 slow \u2013 2.0 fast, 1.0 normal)",
   descInterrupt: "Interrupt sensitivity (0 high barrier / 1 medium / 2 low; ~0.3/0.2/0.1 s speech confirmation)",
@@ -1619,7 +1631,11 @@ var FIELD_LABELS = {
   guardAllowRules: "\u5B88\u536B\u653E\u884C\u89C4\u5219",
   blockPauseMs: "\u6BB5\u843D\u505C\u987F",
   wholeSentenceMath: "\u6574\u53E5\u516C\u5F0F\u51FA\u7A3F",
-  rewriteSecret: "\u5199\u5165\u5BC6\u94A5"
+  rewriteSecret: "\u5199\u5165\u5BC6\u94A5",
+  azureEndpoint: "Azure \u7AEF\u70B9",
+  azureKeyRef: "Azure \u5BC6\u94A5\u5F15\u7528",
+  azureSecret: "\u5199\u5165 Azure \u5BC6\u94A5",
+  azurePhonemes: "Azure \u591A\u97F3\u5B57\u62FC\u97F3\u8868"
 };
 var setHeader = {
   appearance: "none",
@@ -1840,7 +1856,8 @@ var ENGINE_DEFAULT_VOICE = {
   // 避免「config 直连」与「面板切引擎」落到不同默认音色。
   vits: "suyingxue",
   kokoro: "zf_xiaobei",
-  edge: "zh-CN-XiaoxiaoNeural"
+  edge: "zh-CN-XiaoxiaoNeural",
+  azure: "zh-CN-XiaoxiaoNeural"
 };
 var HOST_OPTIONS = [
   { v: "https://huggingface.co", label: "\u5B98\u65B9\u6E90 huggingface.co" },
@@ -1935,12 +1952,12 @@ function TextAreaField({
     }
   );
 }
-function RewriteKeyField({ score, refValue }) {
+function CredentialKeyField({ score, field, refValue, defaultRef }) {
   const [secret, setSecret] = (0, import_react.useState)("");
   const [status, setStatus] = (0, import_react.useState)("");
   const [busy, setBusy] = (0, import_react.useState)(false);
   const save = async () => {
-    const ref = /^[A-Za-z_][A-Za-z0-9_]*$/.test(refValue.trim()) ? refValue.trim() : "GLM_API_KEY";
+    const ref = /^[A-Za-z_][A-Za-z0-9_]*$/.test(refValue.trim()) ? refValue.trim() : defaultRef;
     const value = secret.trim();
     if (!value) {
       setStatus("\u8BF7\u5148\u8F93\u5165\u5BC6\u94A5");
@@ -1957,7 +1974,7 @@ function RewriteKeyField({ score, refValue }) {
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.ok) {
         setSecret("");
-        if (refValue.trim() !== ref) void score.set("rewriteApiKeyRef", ref);
+        if (refValue.trim() !== ref) void score.set(field, ref);
         setStatus("\u5DF2\u4FDD\u5B58\u5230 DSH \u51ED\u636E\u5E93\uFF08" + ref + "\uFF09");
       } else {
         setStatus("\u4FDD\u5B58\u5931\u8D25\uFF1A" + String(data.error ?? res.status));
@@ -2319,7 +2336,7 @@ function EngineStatusInline() {
   }, []);
   const tts = st?.tts;
   if (!tts) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(import_jsx_runtime.Fragment, {});
-  const engineName = tts.engine === "vits" ? t("engineVits") : tts.engine === "kokoro" ? t("engineKokoro") : t("engineEdge");
+  const engineName = tts.engine === "vits" ? t("engineVits") : tts.engine === "kokoro" ? t("engineKokoro") : tts.engine === "azure" ? t("engineAzure") : t("engineEdge");
   const isLocal = !!tts.local;
   const localReady = isLocal ? !!tts.local?.ready : false;
   let statusText;
@@ -2483,10 +2500,10 @@ function VoiceSettingsCard({ scope }) {
   );
   const value = snap?.value ?? {};
   const unavailable = snap?.status === "unavailable" || snap?.status === "error";
-  const engine = value.ttsEngine === "edge" ? "edge" : value.ttsEngine === "kokoro" ? "kokoro" : "vits";
+  const engine = value.ttsEngine === "edge" ? "edge" : value.ttsEngine === "azure" ? "azure" : value.ttsEngine === "kokoro" ? "kokoro" : "vits";
   const [edgeVoices, setEdgeVoices] = (0, import_react.useState)(null);
   (0, import_react.useEffect)(() => {
-    if (engine !== "edge") return;
+    if (engine !== "edge" && engine !== "azure") return;
     let alive = true;
     void fetch(location.origin + BASE_PATH + "/voices").then((res) => res.ok ? res.json() : null).then((data) => {
       if (!alive || !data?.voices) return;
@@ -2505,7 +2522,7 @@ function VoiceSettingsCard({ scope }) {
       alive = false;
     };
   }, [engine]);
-  const voiceOptions = engine === "edge" ? edgeVoices ?? VOICE_OPTIONS : engine === "kokoro" ? VOICE_OPTIONS_KOKORO : VOICE_OPTIONS_LOCAL;
+  const voiceOptions = engine === "edge" || engine === "azure" ? edgeVoices ?? VOICE_OPTIONS : engine === "kokoro" ? VOICE_OPTIONS_KOKORO : VOICE_OPTIONS_LOCAL;
   if (unavailable) {
     return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { "data-dshvma-settings": "card", style: { color: t2.term, fontSize: 12, padding: "14px 16px", ...cardStyle }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { style: { color: "var(--dsw-alias-state-error-primary)" }, children: t("configUnavailable") }),
@@ -2532,7 +2549,8 @@ function VoiceSettingsCard({ scope }) {
             options: [
               { v: "vits", label: t("engineVits") },
               { v: "kokoro", label: t("engineKokoro") },
-              { v: "edge", label: t("engineEdge") }
+              { v: "edge", label: t("engineEdge") },
+              { v: "azure", label: t("engineAzure") }
             ],
             onSelect: (v) => {
               if (v !== engine) {
@@ -2542,6 +2560,12 @@ function VoiceSettingsCard({ scope }) {
           }
         ) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(EngineStatusInline, {}),
+        engine === "azure" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "azureEndpoint", desc: t("descAzureEndpoint"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextField, { score: scope, field: "azureEndpoint", value: String(value.azureEndpoint ?? ""), placeholder: "eastasia \u6216 https://eastasia.tts.speech.microsoft.com" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "azureKeyRef", desc: t("descAzureKeyRef"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextField, { score: scope, field: "azureKeyRef", value: String(value.azureKeyRef ?? ""), placeholder: "AZURE_SPEECH_KEY" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "azureSecret", desc: t("descAzureSecret"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CredentialKeyField, { score: scope, field: "azureKeyRef", refValue: String(value.azureKeyRef ?? ""), defaultRef: "AZURE_SPEECH_KEY" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "azurePhonemes", desc: t("descAzurePhonemes"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextAreaField, { score: scope, field: "azurePhonemes", value: String(value.azurePhonemes ?? ""), placeholder: "\u884C => hang2\n\u94F6\u884C => yin2 hang2", rows: 4 }) })
+        ] }),
         engine === "kokoro" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "kokoroModel", desc: t("descKokoroModel"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           SegGroup,
           {
@@ -2558,7 +2582,7 @@ function VoiceSettingsCard({ scope }) {
           Row,
           {
             name: "voice",
-            desc: engine === "edge" ? t("descVoice") : engine === "kokoro" ? t("descVoiceKokoro") : t("descVoiceLocal"),
+            desc: engine === "edge" ? t("descVoice") : engine === "azure" ? t("descVoiceAzure") : engine === "kokoro" ? t("descVoiceKokoro") : t("descVoiceLocal"),
             children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
               VoiceSelect,
               {
@@ -2567,7 +2591,7 @@ function VoiceSettingsCard({ scope }) {
                 value: value.voice ?? "",
                 options: voiceOptions,
                 placeholder: ENGINE_DEFAULT_VOICE[engine] ?? "zh-CN-XiaoxiaoNeural",
-                showCustom: engine === "edge",
+                showCustom: engine === "edge" || engine === "azure",
                 footer: (v) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(VoicePreviewButton, { voice: v, rate: Number(value.rate ?? 1) })
               }
             )
@@ -2632,7 +2656,7 @@ function VoiceSettingsCard({ scope }) {
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteEnabled", desc: t("descRewriteEnabled"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", { type: "checkbox", checked: Boolean(value.rewriteEnabled), onChange: (e) => void scope.set("rewriteEnabled", e.target.checked) }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteBaseUrl", desc: t("descRewriteBaseUrl"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextField, { score: scope, field: "rewriteBaseUrl", value: value.rewriteBaseUrl ?? "", placeholder: "https://open.bigmodel.cn/api/paas/v4" }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteApiKeyRef", desc: t("descRewriteApiKeyRef"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextField, { score: scope, field: "rewriteApiKeyRef", value: value.rewriteApiKeyRef ?? "", placeholder: "GLM_API_KEY" }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteSecret", desc: t("descRewriteSecret"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(RewriteKeyField, { score: scope, refValue: String(value.rewriteApiKeyRef ?? "") }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteSecret", desc: t("descRewriteSecret"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CredentialKeyField, { score: scope, field: "rewriteApiKeyRef", refValue: String(value.rewriteApiKeyRef ?? ""), defaultRef: "GLM_API_KEY" }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "rewriteModel", desc: t("descRewriteModel"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TextField, { score: scope, field: "rewriteModel", value: value.rewriteModel ?? "", placeholder: "glm-4.5-air" }) }),
         /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, { name: "mathMode", desc: t("descMathMode"), children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
           SegGroup,
@@ -2697,7 +2721,7 @@ var TELEMETRY_VIEW = [
   { stage: "first-tts-chunk", key: "telFirstChunk" },
   { stage: "first-audio-played", key: "telFirstPlayed" }
 ];
-var BUILD_TAG = "455d875";
+var BUILD_TAG = "60f1e79";
 var TELEMETRY_FLAG = "dsh-voice-mode-adaptation.telemetry";
 var telemetryEnabled = typeof localStorage !== "undefined" && localStorage.getItem(TELEMETRY_FLAG) === "1";
 console.log("[dsh-voice] build=" + BUILD_TAG);

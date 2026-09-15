@@ -15020,6 +15020,84 @@ var SpeechRewriter = class _SpeechRewriter {
 
 // src/tts-queue.ts
 import { MsEdgeTTS, OUTPUT_FORMAT } from "msedge-tts";
+
+// src/azure-ssml.ts
+function escapeXml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+}
+function normalizeAzureEndpoint(raw) {
+  const s = String(raw ?? "").trim();
+  if (!s) return "";
+  let base = s;
+  if (!/^https?:\/\//i.test(base)) base = "https://" + base + ".tts.speech.microsoft.com";
+  base = base.replace(/\/+$/, "");
+  if (/\/cognitiveservices\/v1$/i.test(base)) return base;
+  return base + "/cognitiveservices/v1";
+}
+function parsePhonemeTable(raw) {
+  const rules = [];
+  const errors = [];
+  const lines = String(raw ?? "").split(/\r?\n/);
+  lines.forEach((line, idx) => {
+    const text5 = line.trim();
+    if (!text5 || text5.startsWith("#")) return;
+    const m = /^(.*?)(?:=>|->|→)(.*)$/.exec(text5);
+    if (!m) {
+      errors.push("\u7B2C " + (idx + 1) + " \u884C\u7F3A\u5C11\u300C=>\u300D\uFF1A" + text5);
+      return;
+    }
+    const from = m[1].trim();
+    const ph = m[2].trim();
+    if (!from || !ph) {
+      errors.push("\u7B2C " + (idx + 1) + " \u884C\u8BCD\u6216\u62FC\u97F3\u4E3A\u7A7A");
+      return;
+    }
+    if (/[<>&"']/.test(from) || /[<>&"']/.test(ph)) {
+      errors.push("\u7B2C " + (idx + 1) + " \u884C\u542B\u975E\u6CD5\u5B57\u7B26\uFF08< > & \u5F15\u53F7\uFF09");
+      return;
+    }
+    rules.push({ from, ph });
+  });
+  rules.sort((a, b) => b.from.length - a.from.length);
+  return { rules, errors };
+}
+function azureRate(rate) {
+  if (rate === void 0 || !Number.isFinite(rate) || Math.abs(rate - 1) < 1e-6) return "";
+  const pct = Math.round((rate - 1) * 100);
+  return (pct >= 0 ? "+" : "") + pct + "%";
+}
+function applyPhonemes(text5, rules) {
+  if (!rules.length) return escapeXml(text5);
+  let out = "";
+  let i = 0;
+  while (i < text5.length) {
+    let hit = null;
+    for (const r of rules) {
+      if (r.from && text5.startsWith(r.from, i)) {
+        hit = r;
+        break;
+      }
+    }
+    if (hit) {
+      out += '<phoneme alphabet="sapi" ph="' + escapeXml(hit.ph) + '">' + escapeXml(hit.from) + "</phoneme>";
+      i += hit.from.length;
+    } else {
+      out += escapeXml(text5[i]);
+      i++;
+    }
+  }
+  return out;
+}
+function buildAzureSsml(o) {
+  const voice = o.voice || "zh-CN-XiaoxiaoNeural";
+  const lang = o.lang || /^([a-z]{2}-[A-Z]{2})/.exec(voice)?.[1] || "zh-CN";
+  const inner = applyPhonemes(o.text, o.phonemes ?? []);
+  const rate = azureRate(o.rate);
+  const prosody = rate ? '<prosody rate="' + rate + '">' + inner + "</prosody>" : inner;
+  return '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="' + escapeXml(lang) + '"><voice name="' + escapeXml(voice) + '">' + prosody + "</voice></speak>";
+}
+
+// src/tts-queue.ts
 var MP3_MAGIC = 255;
 var TTS_METADATA = { wordBoundaryEnabled: false, sentenceBoundaryEnabled: false };
 function prosodyFromRate(rate) {
@@ -15027,7 +15105,9 @@ function prosodyFromRate(rate) {
   return void 0;
 }
 function isValidMp3(buf) {
-  return buf.length > 0 && buf[0] === MP3_MAGIC;
+  if (buf.length === 0) return false;
+  if (buf[0] === MP3_MAGIC) return true;
+  return buf[0] === 73 && buf[1] === 68 && buf[2] === 51;
 }
 var EdgeTtsEngine = class {
   voice;
@@ -15060,6 +15140,58 @@ var EdgeTtsEngine = class {
         await tts.close();
       } catch {
       }
+    }
+  }
+  async close() {
+  }
+};
+var AzureTtsEngine = class {
+  constructor(opts) {
+    this.opts = opts;
+    this.voice = opts.voice;
+    this.rate = opts.rate;
+  }
+  voice;
+  rate;
+  mime = "audio/mpeg";
+  updateVoice(voice, rate) {
+    if (voice) this.voice = voice;
+    if (rate !== void 0 && Number.isFinite(rate)) this.rate = rate;
+  }
+  async synthesize(text5, options = {}) {
+    const endpoint = normalizeAzureEndpoint(this.opts.endpoint());
+    if (!endpoint) throw new Error("Azure endpoint is not configured");
+    const key = (await this.opts.resolveKey()).trim();
+    if (!key) throw new Error("Azure key is not configured");
+    const ssml = buildAzureSsml({
+      text: text5,
+      voice: options.voice ?? this.voice,
+      rate: options.rate ?? this.rate,
+      phonemes: this.opts.phonemes?.() ?? []
+    });
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), this.opts.timeoutMs ?? 15e3);
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Ocp-Apim-Subscription-Key": key,
+          "Content-Type": "application/ssml+xml",
+          "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3",
+          "User-Agent": "dsh-voice-mode-adaptation"
+        },
+        body: ssml,
+        signal: ctrl.signal
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        throw new Error("Azure TTS HTTP " + res.status + (detail ? ": " + detail.slice(0, 200) : ""));
+      }
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (!isValidMp3(buf)) throw new Error("empty or invalid audio");
+      return buf;
+    } finally {
+      clearTimeout(timer);
     }
   }
   async close() {
@@ -15775,6 +15907,9 @@ var defaultModelCacheDir = () => process.platform === "win32" ? join4(process.en
 var VOICE_SETTINGS_DEFAULTS = {
   ttsEngine: "edge",
   kokoroModel: "int8",
+  azureEndpoint: "",
+  azureKeyRef: "",
+  azurePhonemes: "",
   voice: "zh-CN-XiaoxiaoNeural",
   rate: 1,
   interruptLevel: 0,
@@ -15812,12 +15947,15 @@ var VOICE_SETTINGS_DEFAULTS = {
 function createVoiceSettingsSchema(defs) {
   const d = { ...VOICE_SETTINGS_DEFAULTS, ...defs };
   return z.object({
-    ttsEngine: z.union([z.const("vits"), z.const("kokoro"), z.const("edge")]).default(d.ttsEngine).description(
-      "\u6717\u8BFB\u5F15\u64CE\uFF1Aedge \u5FAE\u8F6F\u4E91\u7AEF\uFF08\u9ED8\u8BA4\uFF0C\u5FEB\u3001\u97F3\u8D28\u81EA\u7136\uFF0C\u88AB\u6717\u8BFB\u6587\u672C\u4F1A\u53D1\u9001\u5230\u5FAE\u8F6F\uFF09/ vits \u672C\u5730\u4E2D\u6587 / kokoro \u672C\u5730\u4E2D\u82F1\uFF08\u56DE\u590D\u6587\u672C\u4E0D\u51FA\u672C\u673A\uFF09\uFF1B\u5207\u6362\u5373\u65F6\u751F\u6548"
+    ttsEngine: z.union([z.const("vits"), z.const("kokoro"), z.const("edge"), z.const("azure")]).default(d.ttsEngine).description(
+      "\u6717\u8BFB\u5F15\u64CE\uFF1Aedge \u5FAE\u8F6F\u4E91\u7AEF\uFF08\u9ED8\u8BA4\uFF0C\u5FEB\u3001\u97F3\u8D28\u81EA\u7136\uFF0C\u88AB\u6717\u8BFB\u6587\u672C\u4F1A\u53D1\u9001\u5230\u5FAE\u8F6F\uFF09/ vits \u672C\u5730\u4E2D\u6587 / kokoro \u672C\u5730\u4E2D\u82F1\uFF08\u56DE\u590D\u6587\u672C\u4E0D\u51FA\u672C\u673A\uFF09/ azure \u4ED8\u8D39\u4E91\u7AEF\uFF08\u9700\u7AEF\u70B9+\u5BC6\u94A5\uFF1B\u652F\u6301 SSML \u97F3\u7D20\u7EA7\u591A\u97F3\u5B57\uFF09\uFF1B\u5207\u6362\u5373\u65F6\u751F\u6548"
     ),
     kokoroModel: z.union([z.const("int8"), z.const("fp32")]).default(d.kokoroModel).description(
       "Kokoro \u6A21\u578B\u7CBE\u5EA6\uFF1Aint8\uFF08\u9ED8\u8BA4\uFF0C\u4F53\u79EF\u5C0F/\u52A0\u8F7D\u5FEB\uFF0CCPU \u53CB\u597D\uFF09/ fp32\uFF08\u97F3\u8D28\u66F4\u597D\u3001\u4F53\u79EF\u5927\uFF0CGPU \u6216\u5927\u5185\u5B58\u673A\u5668\u63A8\u8350\uFF09\uFF1B\u4E24\u6863\u5171\u7528\u540C\u4E00\u5957 103 \u97F3\u8272\uFF0C\u5207\u6362\u5373\u65F6\u751F\u6548"
     ),
+    azureEndpoint: z.string().default(d.azureEndpoint).description("Azure \u6717\u8BFB\u7AEF\u70B9\uFF1A\u586B\u533A\u57DF\u540D\uFF08\u5982 eastasia\uFF09\u6216\u5B8C\u6574\u94FE\u63A5\uFF08https://<region>.tts.speech.microsoft.com\uFF09\uFF1B\u4EC5 azure \u5F15\u64CE\u4F7F\u7528"),
+    azureKeyRef: z.string().default(d.azureKeyRef).description("Azure \u5BC6\u94A5\u7684\u51ED\u636E\u5F15\u7528\u540D\uFF08\u5982 AZURE_SPEECH_KEY\uFF09\uFF1B\u771F\u5B9E\u5BC6\u94A5\u5199\u5165 DSH \u51ED\u636E\u5E93\uFF0C\u4E0D\u843D\u914D\u7F6E\u6587\u4EF6\u660E\u6587"),
+    azurePhonemes: z.string().default(d.azurePhonemes).description("Azure \u591A\u97F3\u5B57\u62FC\u97F3\u8868\uFF1A\u6BCF\u884C\u300C\u8BCD => \u62FC\u97F3\u300D\uFF08\u5982 \u884C => hang2\u3001\u94F6\u884C => yin2 hang2\uFF09\uFF0C# \u8D77\u9996\u4E3A\u6CE8\u91CA\uFF1B\u7ECF SSML <phoneme> \u7CBE\u786E\u53D1\u97F3\uFF0C\u4EC5 azure \u5F15\u64CE\u4F7F\u7528"),
     voice: z.string().default(d.voice).description(
       "\u6717\u8BFB\u97F3\u8272\uFF08\u6309 ttsEngine \u53D6\u503C\uFF1Avits \u7528\u8BF4\u8BDD\u4EBA\u540D suyingxue/gunian/fushiyu/bingjiao/bazong\uFF1Bkokoro \u7528 0-102 \u7F16\u53F7\u6216\u4E2D\u6587\u540D zf_xiaobei/zf_xiaoni/zf_xiaoxiao/zf_xiaoyi\uFF1Bedge \u7528 Edge ShortName \u5982 zh-CN-XiaoxiaoNeural \u6653\u6653\xB7\u5973\uFF0C\u5B8C\u6574\u6E05\u5355\u89C1 scripts/list-voices.mjs\uFF09"
     ),
@@ -15860,7 +15998,7 @@ var Config = z.object({
   enabled: z.boolean().default(true),
   cacheDir: z.string().default(defaultModelCacheDir()),
   modelHost: z.string().default("https://huggingface.co"),
-  ttsEngine: z.union([z.const("edge"), z.const("vits"), z.const("kokoro")]).default("edge"),
+  ttsEngine: z.union([z.const("edge"), z.const("vits"), z.const("kokoro"), z.const("azure")]).default("edge"),
   kokoroModel: z.union([z.const("int8"), z.const("fp32")]).default("int8"),
   allowLan: z.boolean().default(false),
   allowCustomModelHost: z.boolean().default(false),
@@ -15941,8 +16079,8 @@ function apply(ctx, config) {
     guardAllow = parseGuardAllow(raw);
   };
   syncGuard();
-  const resolveRewriteKey = async () => {
-    const raw = vset.rewriteApiKeyRef.trim();
+  const resolveCredential = async (rawRef) => {
+    const raw = String(rawRef ?? "").trim();
     if (!raw) return "";
     if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(raw)) {
       const creds = ctx.get("credentials");
@@ -15957,6 +16095,8 @@ function apply(ctx, config) {
     }
     return raw;
   };
+  const resolveRewriteKey = () => resolveCredential(vset.rewriteApiKeyRef);
+  const resolveAzureKey = () => resolveCredential(vset.azureKeyRef);
   const rebuildRewriter = () => {
     const s = vset;
     const sig = [
@@ -16023,6 +16163,15 @@ function apply(ctx, config) {
   void asr.warmup();
   const makeEngine = (kind) => {
     if (kind === "edge") return new EdgeTtsEngine(config.voice, config.rate);
+    if (kind === "azure") {
+      return new AzureTtsEngine({
+        endpoint: () => vset.azureEndpoint,
+        resolveKey: resolveAzureKey,
+        phonemes: () => parsePhonemeTable(vset.azurePhonemes).rules,
+        voice: vset.voice || config.voice,
+        rate: vset.rate
+      });
+    }
     if (kind === "kokoro") {
       return createSherpaKokoroEngine({
         cacheDir: config.cacheDir,
@@ -16121,9 +16270,10 @@ function apply(ctx, config) {
           name: "dsh-voice-mode-adaptation",
           enabled: config.enabled,
           active: activeVoiceSession,
-          // 被拒绝的替代表行 / 放行规则行：给用户可见反馈，而不是静默忽略。
+          // 被拒绝的替代表行 / 放行规则行 / Azure 拼音表行：给用户可见反馈，而不是静默忽略。
           pronunciationErrors,
-          guardErrors: guardAllow.errors
+          guardErrors: guardAllow.errors,
+          azurePhonemeErrors: parsePhonemeTable(vset.azurePhonemes).errors
         });
       }
     })
