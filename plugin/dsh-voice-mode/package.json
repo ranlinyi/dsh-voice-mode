@@ -6,11 +6,11 @@
   "main": "lib/index.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/ranlinyi/dsh-voice-mode.git"
+    "url": "git+https://github.com/ranlinyi/dsh-voice-mode-adaptation.git"
   },
-  "homepage": "https://github.com/ranlinyi/dsh-voice-mode#readme",
+  "homepage": "https://github.com/ranlinyi/dsh-voice-mode-adaptation#readme",
   "bugs": {
-    "url": "https://github.com/ranlinyi/dsh-voice-mode/issues"
+    "url": "https://github.com/ranlinyi/dsh-voice-mode-adaptation/issues"
   },
   "engines": {
     "node": ">=18.0.0",

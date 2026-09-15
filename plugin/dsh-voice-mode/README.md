@@ -1,11 +1,12 @@
-# dsh-voice-mode
+# dsh-voice-mode-adaptation
 
-[![npm version](https://img.shields.io/npm/v/dsh-voice-mode?style=flat-square)](https://www.npmjs.com/package/dsh-voice-mode)
-[![License](https://img.shields.io/github/license/qishuilalala/dsh-voice-mode?style=flat-square)](LICENSE)
+> **本仓库是 [dsh-voice-mode](https://github.com/qishuilalala/dsh-voice-mode)（MIT）的 fork**，新增**可选的「语音改编站」**：让朗读读懂**数学公式、表格、代码、脚注**等**非普通文本**；改编站默认关闭，不开时**零 API Key、零外发**，与原版一致。安装见 **[语音改编站 · Quick Start](../../QUICKSTART-adaptation.md)**。
+
+[![License](https://img.shields.io/github/license/ranlinyi/dsh-voice-mode-adaptation?style=flat-square)](LICENSE)
 [![dsh-plugin](https://img.shields.io/badge/dsh--plugin-voice-brightgreen?style=flat-square)](https://github.com/topics/dsh-plugin)
-[![awesome-dsh-plugin](https://img.shields.io/badge/awesome--dsh--plugin-listed-2ea043?style=flat-square)](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin#plugins)
+[![fork of dsh-voice-mode](https://img.shields.io/badge/fork%20of-dsh--voice--mode-blue?style=flat-square)](https://github.com/qishuilalala/dsh-voice-mode)
 
-DeepSeek Harness 语音双工对话模式：会话内一键进入 → 边说边出字的流式识别 → 停顿自动发送 → 最终答复按句流式朗读 + 实时字幕，开口即可打断（真 barge-in）。无需 API Key，识别模型在本地宿主端推理。
+DeepSeek Harness 语音双工对话模式（fork 版）：会话内一键进入 → 边说边出字的流式识别 → 停顿自动发送 → 最终答复按句流式朗读 + 实时字幕，开口即可打断（真 barge-in）。识别在本地推理、无需 API Key；本 fork 额外提供**可选的「语音改编站」**，处理公式 / 表格 / 代码 / 脚注等非普通文本。
 
 > **Full-duplex voice mode for DeepSeek Harness** — streamed ASR to an editable draft, sentence-by-sentence read-aloud with live captions, and speaking interrupts playback and the running turn.
 

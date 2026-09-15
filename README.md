@@ -1,121 +1,130 @@
 <p align="center">
-  <img src="assets/hero-logo.png" width="120" alt="dsh-voice-mode">
+  <img src="assets/hero-logo.png" width="120" alt="dsh-voice-mode-adaptation">
 </p>
 
-<h1 align="center">dsh-voice-mode</h1>
+<h1 align="center">dsh-voice-mode-adaptation</h1>
 
-<p align="center">DeepSeek Harness 全双工语音插件 —— 实时识别 · 按句朗读 · 开口即打断</p>
-
-> **这是 fork：`dsh-voice-mode-adaptation`。** 在上游基础上新增「语音改编站」——让公式、表格、代码被**正确口述**，屏幕 Markdown 完整保留。
-> 安装与配置请看 **[语音改编站 · Quick Start](QUICKSTART-adaptation.md)**。
+<p align="center">让语音朗读读懂「非普通文本」—— 数学公式 · 表格 · 代码 · 脚注</p>
 
 <p align="center">
   <a href="https://github.com/topics/dsh-plugin"><img src="https://img.shields.io/badge/dsh--plugin-voice-brightgreen?style=flat-square" alt="dsh-plugin voice"></a>
-  <a href="https://www.npmjs.com/package/dsh-voice-mode"><img src="https://img.shields.io/npm/v/dsh-voice-mode?style=flat-square" alt="npm version"></a>
-  <a href="https://github.com/qishuilalala/dsh-voice-mode/releases"><img src="https://img.shields.io/github/v/release/qishuilalala/dsh-voice-mode?style=flat-square" alt="GitHub release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/qishuilalala/dsh-voice-mode?style=flat-square" alt="License"></a>
-  <a href="https://github.com/awesome-dsh-plugin/awesome-dsh-plugin#plugins"><img src="https://img.shields.io/badge/awesome--dsh--plugin-listed-2ea043?style=flat-square" alt="awesome-dsh-plugin"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/ranlinyi/dsh-voice-mode-adaptation?style=flat-square" alt="License"></a>
+  <a href="https://github.com/qishuilalala/dsh-voice-mode"><img src="https://img.shields.io/badge/fork%20of-dsh--voice--mode-blue?style=flat-square" alt="fork of dsh-voice-mode"></a>
 </p>
 
-![dsh-voice-mode 全双工语音对话](assets/hero-banner.png)
-
-> **Full-duplex voice mode for DeepSeek Harness** —— 在会话内用语音完成整轮对话：说话时**边说边出字**、停顿后自动发送；回复**按句朗读**并跟随实时字幕；朗读中**开口即打断**。识别在本地推理、无需 API Key；朗读默认 Edge 云端（快且自然），本地 VITS / Kokoro 可选（隐私优先）。兼容 dsh 0.1.1-rc.2 起全版本（已在 0.1.1 / 0.1.2 / 0.1.5-rc.1 / 0.1.5-rc.2 端到端验证）。
-
----
-
-## 💡 它是什么
-
-在 DeepSeek Harness 的会话里，点一下麦克风就能用语音完成整轮对话：
-
-- 🎤 **你说** —— 一边说一边**实时出字**（流式识别），停顿约 **700ms 自动发送**；
-- 🔊 **它答** —— 最终回复**按句朗读**，全程实时字幕跟随；
-- ⏸️ **随时打断** —— AI 还在朗读时**开口即打断**，你的话直接被听见。
-
-**零 API Key**：识别在宿主端**本地推理**（**zipformer2** 流式 + SenseVoice 定稿）；朗读默认 **Edge 云端**（快、自然），可选本地 **VITS** 纯中文 / **Kokoro** 中英混读（回复文本不出本机，隐私优先）。
+> **本仓库是 [dsh-voice-mode](https://github.com/qishuilalala/dsh-voice-mode)（作者 qishuilalala，MIT 许可）的 fork。**
+> 上游「零 API Key · 本地识别 · 按句朗读 · 开口即打断」的能力全部保留；本 fork 在其上新增**可选的「语音改编站」**，专攻**非普通文本的朗读**。
+>
+> 安装与配置见 **[语音改编站 · Quick Start](QUICKSTART-adaptation.md)**。
 
 ---
 
-## ✨ 为什么值得用
+## 🎯 它解决什么：让「非普通文本」被读对
+
+普通 TTS 遇到公式、表格、代码时，要么**跳过**，要么**逐字母 / 逐行念**。语音改编站在朗读前先按与界面渲染器一致的规则拆分流式 Markdown，再分类适配：
+
+| 内容 | 没开改编站 | 开启改编站 |
+| --- | --- | --- |
+| **行内公式** <code>$...$</code> | 逐字符念错 / 跳过 | 按数学模式：<code>rules</code> 确定性规则 / <code>model</code> 模型口述 |
+| **行间公式** <code>$$...$$</code> | 跳过 / 念错 | 口述稿：分式分母在前、根号、上下标、希腊字母、算子… |
+| **含公式的整句** | 公式与正文各念一遍 | 整句一起出稿，杜绝重复朗读 |
+| **表格** | 逐行念数字 | 表意描述：行列数、列名、首列、关键数值 |
+| **代码块** | 逐行念代码 | 讲思路，而不是念源码 |
+| **脚注 / 行内代码** | 噪声字符 | 清洗后朗读 |
+| **化学式 / 物理单位** | 逐字母念 <code>\ce</code> | <code>\ce{H2SO4}</code> → 「氢 2 硫 氧 4」；<code>\pu{123 kJ/mol}</code> → 「123 千焦 每 摩尔」（内置确定性读法） |
+
+> **屏幕阅读不受影响**：Markdown / LaTeX 原样保留，只对语音侧单独适配（所见即所送——拆出来的片段与界面渲染的是同一批）。
+
+---
+
+## 🔒 默认与上游一致：不开改编站 = 零 API Key、零外发
+
+「语音改编站」**默认关闭**（<code>rewriteEnabled: false</code>）。不开启时：
+
+- **不连接任何外部端点，不需要任何 API Key**；
+- 行为与上游 <code>dsh-voice-mode</code> 完全一致（识别仍在本地推理）。
+
+开启后需要一个 **OpenAI 兼容的改写端点**（默认智谱 <code>glm-4.5-air</code>，可换成任意兼容端点或本地网关），并把**待朗读的公式 / 表格 / 代码片段**发送给该端点。是否接受这种外发，由你决定。
+
+---
+
+## 🚀 安装
+
+    git clone https://github.com/ranlinyi/dsh-voice-mode-adaptation.git
+    cd dsh-voice-mode-adaptation
+
+    # 装入 web profile（本地路径最稳妥；lib/ 构建产物随仓库提供，无需自行构建）
+    dsh plugin --profile web add "$PWD/plugin/dsh-voice-mode"
+
+    # 装插件 / 改源码后需重启 dsh web 才生效
+
+> 详细步骤、推荐设置与排错见 **[语音改编站 · Quick Start](QUICKSTART-adaptation.md)**。
+
+---
+
+## ✨ 继承自上游的全双工对话能力
 
 | 亮点 | 说明 |
 | --- | --- |
-| 🔒 **零 API Key · 识别本地** | 识别本地推理；朗读默认 Edge 云端，本地 VITS / Kokoro 可选（隐私优先） |
-| ⚡ **全双工对话** | 边说边出字、停顿自动发；AI 朗读时开口即打断，节奏接近真人对话 |
+| 🔒 **零 API Key · 识别本地** | 识别在宿主端本地推理（zipformer2 流式 + SenseVoice 定稿）；朗读默认 Edge 云端，本地 VITS / Kokoro 可选（隐私优先） |
+| ⚡ **全双工对话** | 边说边出字、停顿自动发；AI 朗读时开口即打断 |
 | 🗣️ **按句朗读 + 实时字幕** | 只读最终答复（跳过 reasoning / 工具调用），字幕跟随播放、可跳过 |
-| 🎚️ **两种交互模式** | `toggle` 持续聆听自动断句 ｜ `hold` 按住说话、松手即发；输入框旁一键切换 |
-| 🎧 **声学打断引擎** | 自适应阈值 barge-in（朗读时自动超灵敏），外放也能精准打断、不误判回声 |
-| 🧩 **全版本兼容** | 注入锚点取新旧交集 + 多版本 typecheck/冒烟回归；同一份代码跑 dsh 0.1.1-rc.2 → 0.1.5-rc.2（含 0.1.5-rc.2 真实 LLM 端到端验证）|
-| 🌐 **开箱即用** | 模型懒加载（断点续传 + 镜像回退）；界面语言随浏览器（中 / 英）；安全加固 |
-
----
-
-## 🚀 60 秒上手
-
-```sh
-dsh plugin --profile web add dsh-voice-mode
-```
-
-> bundle 插件安装后需**重启 dsh** 生效（Linux：`systemctl restart dsh`；其他平台重启 dsh 进程）。
-
-**第一次用**：
-
-1. 进入任一会话，按 `Ctrl+Shift+V`（或点输入区麦克风按钮）进入语音模式，状态条显示「聆听中…」；
-2. 说一句完整的话（如「帮我看看今天的天气」）→ 实时字幕立即出现，停顿后自动发送；
-3. AI 回复开始朗读时，**开口说话 → 朗读即刻停止，你的话被听见**（这就是 barge-in）。
-
-### 操作手势
-
-| 手势 | 作用 |
-| --- | --- |
-| `Ctrl+Shift+V` | 进入 / 退出语音模式 |
-| 直接说话（toggle） | 边说边出字，停顿 700ms 自动发送；按住 `Ctrl` 强制立即发送 |
-| 按住麦克风按钮（hold） | 松手发送；短按退出；滑出 / `Esc` / 失焦放弃本段 |
-| 点输入框旁模式按钮 | 在「持续聆听 ⇄ 按住说」间切换（保存到设置） |
-| AI 朗读时开口说话 | 打断朗读并取消当前回合 |
-| 点状态条「退出」 | 退出语音模式 |
-| 点字幕浮层「跳过」 | 跳过当前句朗读 |
+| 🎚️ **两种交互模式** | <code>toggle</code> 持续聆听自动断句 ｜ <code>hold</code> 按住说话、松手即发 |
+| 🎧 **声学打断引擎** | 自适应阈值 barge-in + 回声门控（<code>bargeInMode</code>） |
+| 🧩 **全版本兼容** | 同一份代码跑 dsh 0.1.1-rc.2 → 0.1.5-rc.2 |
+| 🌐 **开箱即用** | 模型懒加载（断点续传 + 镜像回退）；界面语言随浏览器 |
 
 ![全双工语音体验（概念示意）](assets/voice-experience.png)
 
 ---
 
-## ⚙️ 在哪设置
+## ⚙️ 设置
 
-**设置 → Plugins → 插件配置 → 语音模式（voice-mode）**。最常用的几个：
+**设置 → Plugins → 语音改编站**（命名空间 <code>voice-mode-adaptation</code>）。
 
-| 你想调什么 | 改哪个键 | 默认 | 说明 |
+### 语音改编站（本 fork 新增）
+
+| 想调什么 | 键 | 默认 | 说明 |
 | --- | --- | --- | --- |
-| 朗读引擎 | `ttsEngine` | `edge` | `edge` 微软云端（默认，快）/ `vits` 本地中文 / `kokoro` 本地中英；**即时生效** |
-| 模型精度 | `kokoroModel` | `int8` | Kokoro 精度：`int8`（默认 109MB，CPU 推荐）/ `fp32`（311MB，音质更好，独显/大内存推荐） |
-| 音色 / 语速 | `voice` / `rate` | `zh-CN-XiaoxiaoNeural`（Edge）/ `1.0` | 按引擎取值：edge 用 ShortName（下拉全量加载 322 个）/ vits 说话人名 / kokoro 编号或中文名；行内可**试听** |
-| 打断灵敏度 | `interruptLevel` | `0` | 0 高门槛 / 1 中 / 2 低 |
-| 停顿自动发送 | `silenceMs` / `autoSend` | `700` / `true` | 停顿毫秒数；`autoSend` 关闭则只进草稿 |
-| 交互模式 | `mode` | `toggle` | `toggle` 持续聆听 / `hold` 按住说话 |
-| 口语化回复 | `spokenFormat` | `true` | 语音会话的回复更口语、短句、无 Markdown 符号（朗读更顺更快） |
-| 模型镜像 | `modelHost` | 默认源 | 国内网络填 `https://hf-mirror.com` |
-| 空闲退出 | `idleTimeoutMinutes` | `10` | 无活动自动退出语音模式 |
+| 总开关 | <code>rewriteEnabled</code> | <code>false</code> | 不开 = 不改写、不外发、不需要 Key |
+| 数学模式 | <code>mathMode</code> | <code>rules</code> | <code>rules</code> 确定性规则 / <code>model</code> 交模型 / <code>verbatim</code> 原样 |
+| 改写端点 | <code>rewriteBaseUrl</code> | 智谱 v4 | 任意 OpenAI 兼容端点 |
+| 改写模型 | <code>rewriteModel</code> | <code>glm-4.5-air</code> | |
+| 密钥引用 | <code>rewriteApiKeyRef</code> | 空 | 只填引用名；真实 Key 用「写入密钥」进 DSH 凭据库 |
+| 整句出稿 | <code>wholeSentenceMath</code> | <code>true</code> | 含公式的整句整体出稿，避免重复朗读 |
+| 段落停顿 | <code>blockPauseMs</code> | <code>350</code> | 段落 / 标题之间的停顿毫秒 |
+| 守卫档位 | <code>guardMode</code> | <code>standard</code> | <code>standard</code> / <code>lenient</code> / <code>strict</code> / <code>off</code> |
+| 多音字表 | <code>pronunciationFixes</code> | 「行 háng」词表 | 文本层同音替换（Edge 不支持 SSML） |
 
-> `ttsEngine` / `kokoroModel` / `voice` / `rate` / `spokenFormat` **立即生效**；其余下次进入语音模式时生效。
-> **说明**：`wakeWord`（唤醒词，默认关）与 `toolBeep`（工具提示音，默认关）已完整接入；早期 fork 的 `asrModel`（双语 paraformer）与 `punctuate`（神经标点）已移除——SenseVoice 定稿本身已带标点，流式识别固定为 zipformer2。
-> 完整设置、常用音色表、schema 配置见 [详细文档](plugin/dsh-voice-mode/README.md)。
+### 继承自上游
+
+| 想调什么 | 键 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| 朗读引擎 | <code>ttsEngine</code> | <code>edge</code> | <code>edge</code> 云端 / <code>vits</code> 本地中文 / <code>kokoro</code> 本地中英；即时生效 |
+| 模型精度 | <code>kokoroModel</code> | <code>int8</code> | <code>int8</code> 109MB / <code>fp32</code> 311MB 音质更好 |
+| 音色 / 语速 | <code>voice</code> / <code>rate</code> | <code>zh-CN-XiaoxiaoNeural</code> / <code>1.0</code> | 行内可试听 |
+| 打断方式 | <code>bargeInMode</code> | <code>auto</code> | 外放建议 <code>manual</code>，避免回声自打断 |
+| 停顿自动发送 | <code>silenceMs</code> / <code>autoSend</code> | <code>1500</code> / <code>true</code> | |
+| 交互模式 | <code>mode</code> | <code>toggle</code> | |
+| 保留 Markdown 的朗读提示 | <code>spokenFormat</code> | <code>false</code> | 开启后注入「保留 Markdown/LaTeX」提示词 |
+| 模型镜像 | <code>modelHost</code> | 默认源 | 国内填 <code>https://hf-mirror.com</code> |
+
+> 完整设置、音色表与 schema 见 [插件详细文档](plugin/dsh-voice-mode/README.md)。
 
 ---
 
 ## 📦 功能全景
 
-- **朗读**：默认 Edge 云端；本地 VITS（纯中文 5 说话人）/ Kokoro（中英混读 103 音色，int8 默认 / fp32 可选），独立子进程、崩溃自愈
-- **流式识别**：**zipformer2** 流式（边说边出字）+ SenseVoice 定稿（带标点 / 数字归一化）
-- **开口即打断（barge-in）**：自适应阈值（滚动噪声地板）+ 朗读时自动超灵敏；本地静音 + 合成队列作废 + 正在运行的回合取消
-- **两种交互**：`toggle` 持续聆听自动断句 / `hold` 按住说话、松手即发；输入框旁模式切换按钮
-- **模型预热 + 懒下载**：ASR 模型 host 启动即后台预热（首次开语音零冷启动）；本地 TTS 懒下载，`.part` 断点续传 + 镜像回退，状态条实时显示进度
-- **安全加固**：会话存在性校验 / 回环 + Origin 校验 / 全端点限流 / 模型 SHA256 固定 / 下载域名白名单
-- **界面语言**：跟随浏览器（中文 / English）
-
-![真机界面（截图，当前版本以实机为准）](assets/screenshot-voice.png)
+- **语音改编站**：公式 / 表格 / 代码 / 脚注的非普通文本适配；行内 + 行间混合公式；化学式与物理单位确定性读法
+- **朗读**：Edge 云端（默认）/ 本地 VITS / Kokoro（中英混读），独立子进程、崩溃自愈
+- **流式识别**：zipformer2 流式 + SenseVoice 定稿
+- **开口即打断**：自适应阈值 + 朗读时自动超灵敏
+- **模型预热 + 懒下载**：断点续传 + 镜像回退
+- **安全加固**：会话校验 / 回环 + Origin 校验 / 限流 / 模型 SHA256 固定
 
 ### 架构总览
 
-![dsh-voice-mode 架构图](assets/architecture.png)
+![dsh-voice-mode-adaptation 架构图](assets/architecture.png)
 
 ---
 
@@ -123,13 +132,14 @@ dsh plugin --profile web add dsh-voice-mode
 
 | 现象 | 处理 |
 | --- | --- |
-| 点麦克风无反应，状态条红字 | 浏览器拒绝麦克风：地址栏（iOS 为 设置 → Safari → 麦克风）开启后重试 |
-| 状态条「正在加载模型… x%」卡住 | 检查网络；模型较大可先 `npm run prefetch`；国内网络 `modelHost` 配 `https://hf-mirror.com` |
-| 朗读无声音 / 无字幕 | 本地引擎首次合成需加载模型；若持续失败看状态条提示（自动退避重试）；确认页面前台且未静音 |
-| 语音模式进不去 | 检查插件 `enabled`；多标签页时确认当前会话为活动会话 |
-| 识别到但不是我要说的 | 环境噪声：降低音量或提高 `interruptLevel`（高门槛） |
+| 点了没反应 / 改了源码不生效 | 重启 <code>dsh web</code>；前端改完要强刷（Ctrl+Shift+R） |
+| 化学式显示成红色报错 | DSH 自带 KaTeX 未加载 mhchem；本 fork 朗读侧已支持，渲染侧见 Quick Start 常见问题第 10 条 |
+| 状态条「正在加载模型… x%」卡住 | 检查网络；国内把 <code>modelHost</code> 配 <code>https://hf-mirror.com</code> |
+| 外放时总被自己打断 | <code>bargeInMode</code> 改为 <code>manual</code>，或戴耳机 |
+| 公式没走模型 | 检查 <code>mathMode</code>、<code>rewriteEnabled</code> 与 Key |
+| 语音模式进不去 | 检查插件 <code>enabled</code>；多标签页确认当前为活动会话 |
 
-> **已知限制**：`Ctrl+Shift+V` 会覆盖浏览器「粘贴纯文本」快捷键（普通粘贴仍用 `Ctrl+V`）；识别为简体中文优先；**Safari / iOS** 需 HTTPS 或 localhost、首次需授权麦克风、后台 / 锁屏会暂停识别与朗读。
+> **已知限制**：Edge 免费端点不支持音素级 SSML，多音字只能走文本替代表；Safari / iOS 需 HTTPS 或 localhost。
 
 ---
 
@@ -137,11 +147,14 @@ dsh plugin --profile web add dsh-voice-mode
 
 | 文档 | 说明 |
 | --- | --- |
-| [完整使用说明（中文）](plugin/dsh-voice-mode/README.md) | 功能 / 手势 / 设置 / 配置 / 已知限制 / 故障排查 |
+| [语音改编站 · Quick Start](QUICKSTART-adaptation.md) | 安装、首次配置、推荐设置、验证与排错 |
+| [插件详细文档](plugin/dsh-voice-mode/README.md) | 上游完整功能 / 手势 / 设置 / 配置 |
 | [English docs](plugin/dsh-voice-mode/README.en.md) | Same, in English |
 
-## License
+## 来源与许可
 
-[MIT](LICENSE)
+- 上游：[qishuilalala/dsh-voice-mode](https://github.com/qishuilalala/dsh-voice-mode)（MIT）
+- 本 fork：[ranlinyi/dsh-voice-mode-adaptation](https://github.com/ranlinyi/dsh-voice-mode-adaptation)
+- 许可：[MIT](LICENSE) —— 保留上游版权与署名；本 fork 的改动同样以 MIT 发布。
 
 > 部分实现借鉴 [haoku123/dsh-voice](https://github.com/haoku123/dsh-voice)。

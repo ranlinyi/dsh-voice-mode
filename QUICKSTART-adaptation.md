@@ -7,7 +7,7 @@
 
 | 项 | 值 |
 |---|---|
-| 仓库 | https://github.com/ranlinyi/dsh-voice-mode |
+| 仓库 | https://github.com/ranlinyi/dsh-voice-mode-adaptation |
 | 分支 | `feat/speech-adaptation` |
 | 实测基线 | DSH `0.1.5-rc.1` · Node `v24.21.0` · Arch Linux + PipeWire |
 | 许可 | MIT（继承上游） |
@@ -47,7 +47,7 @@
 `lib/` 构建产物**随仓库提供**，普通用户无需自己构建：
 
 ```bash
-git clone https://github.com/ranlinyi/dsh-voice-mode.git
+git clone https://github.com/ranlinyi/dsh-voice-mode-adaptation.git
 cd dsh-voice-mode
 
 # 用本地路径装入 web profile（推荐，最不易出错）
