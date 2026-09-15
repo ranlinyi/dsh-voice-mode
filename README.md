@@ -100,7 +100,7 @@
 
 | 想调什么 | 键 | 默认 | 说明 |
 | --- | --- | --- | --- |
-| 朗读引擎 | <code>ttsEngine</code> | <code>edge</code> | <code>edge</code> 云端 / <code>vits</code> 本地中文 / <code>kokoro</code> 本地中英；即时生效 |
+| 朗读引擎 | <code>ttsEngine</code> | <code>edge</code> | <code>edge</code> 云端 / <code>vits</code> 本地中文 / <code>kokoro</code> 本地中英 / <code>azure</code> 付费云端（SSML 音素）；即时生效 |
 | 模型精度 | <code>kokoroModel</code> | <code>int8</code> | <code>int8</code> 109MB / <code>fp32</code> 311MB 音质更好 |
 | 音色 / 语速 | <code>voice</code> / <code>rate</code> | <code>zh-CN-XiaoxiaoNeural</code> / <code>1.0</code> | 行内可试听 |
 | 打断方式 | <code>bargeInMode</code> | <code>auto</code> | 外放建议 <code>manual</code>，避免回声自打断 |
@@ -109,6 +109,20 @@
 | 保留 Markdown 的朗读提示 | <code>spokenFormat</code> | <code>false</code> | 开启后注入「保留 Markdown/LaTeX」提示词 |
 | 模型镜像 | <code>modelHost</code> | 默认源 | 国内填 <code>https://hf-mirror.com</code> |
 
+### 可选：Azure 付费朗读引擎（音素级多音字）
+
+Edge 免费端点**不支持任何音素级 SSML**，多音字只能靠文本替代表。需要精确纠音时，可把朗读引擎切成 **Azure 云端（付费）**（在设置里排在 Edge 之后；**只有选中它，才会出现下面这几项**）：
+
+| 设置项 | 键 | 说明 |
+| --- | --- | --- |
+| Azure 端点 | <code>azureEndpoint</code> | 填区域名（如 <code>eastasia</code>），或完整链接 <code>https://&lt;region&gt;.tts.speech.microsoft.com</code> |
+| Azure 密钥引用 | <code>azureKeyRef</code> | 只填引用名（如 <code>AZURE_SPEECH_KEY</code>）；真实密钥经「写入 Azure 密钥」存入 **DSH 凭据库**，不落配置文件明文 |
+| Azure 多音字拼音表 | <code>azurePhonemes</code> | 每行「词 => 拼音」，如 <code>行 => hang2</code>、<code>银行 => yin2 hang2</code>；经 SSML <code>&lt;phoneme alphabet="sapi"&gt;</code> 精确发音 |
+
+- 音色沿用上面的「音色」选择（Azure 与 Edge 使用相同的 ShortName）；
+- **默认仍是 Edge**：不切 Azure 就零 API Key、零外发；
+- 切到 Azure 后，被朗读文本会发送到**你自己的** Azure 语音资源。
+
 > 完整设置、音色表与 schema 见 [插件详细文档](plugin/dsh-voice-mode/README.md)。
 
 ---
@@ -116,7 +130,7 @@
 ## 📦 功能全景
 
 - **语音改编站**：公式 / 表格 / 代码 / 脚注的非普通文本适配；行内 + 行间混合公式；化学式与物理单位确定性读法
-- **朗读**：Edge 云端（默认）/ 本地 VITS / Kokoro（中英混读），独立子进程、崩溃自愈
+- **朗读**：Edge 云端（默认）/ 本地 VITS / Kokoro（中英混读）/ Azure 付费云端（SSML 音素），独立子进程、崩溃自愈
 - **流式识别**：zipformer2 流式 + SenseVoice 定稿
 - **开口即打断**：自适应阈值 + 朗读时自动超灵敏
 - **模型预热 + 懒下载**：断点续传 + 镜像回退
@@ -139,7 +153,7 @@
 | 公式没走模型 | 检查 <code>mathMode</code>、<code>rewriteEnabled</code> 与 Key |
 | 语音模式进不去 | 检查插件 <code>enabled</code>；多标签页确认当前为活动会话 |
 
-> **已知限制**：Edge 免费端点不支持音素级 SSML，多音字只能走文本替代表；Safari / iOS 需 HTTPS 或 localhost。
+> **已知限制**：Edge 免费端点不支持音素级 SSML，多音字只能走文本替代表；需要精确纠音可切 **Azure** 引擎（见上文）。Safari / iOS 需 HTTPS 或 localhost。
 
 ---
 

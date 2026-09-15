@@ -48,7 +48,7 @@
 
 ```bash
 git clone https://github.com/ranlinyi/dsh-voice-mode-adaptation.git
-cd dsh-voice-mode
+cd dsh-voice-mode-adaptation
 
 # 用本地路径装入 web profile（推荐，最不易出错）
 dsh plugin --profile web add "$PWD/plugin/dsh-voice-mode"
@@ -107,6 +107,25 @@ dsh web                    # 重新启动
 > ⚠️ **绝对不要把真实密钥填进 YAML。** 设置项 `rewriteApiKeyRef` 只放「引用名」。
 > 未配置可用 Key 时，改写器**静默失败并回退**，外观上等同于「改编站关闭」。
 
+### 5.1 可选：Azure 付费引擎（音素级多音字）
+
+免费 Edge 端点不支持音素级 SSML，多音字只能靠文本替代表。若要**精确纠音**，可切换朗读引擎：
+
+1. 设置 → **朗读引擎** → 选 **「Azure 云端（付费）」**（排在 Edge 之后）；
+2. 选中后才会出现下面几项，依次填写：
+
+   | 设置项 | 填什么 |
+   |---|---|
+   | Azure 端点 | 区域名（如 `eastasia`）或完整链接 `https://<region>.tts.speech.microsoft.com` |
+   | Azure 密钥引用 | 引用名，如 `AZURE_SPEECH_KEY` |
+   | 写入 Azure 密钥 | 粘贴 Azure 订阅密钥 → 存进 **DSH 凭据库**（配置文件只留引用名，明文不落盘） |
+   | Azure 多音字拼音表 | 每行「词 => 拼音」，如 `行 => hang2`、`银行 => yin2 hang2` |
+
+3. 音色沿用上面的「音色」选择（Azure 与 Edge 使用相同的 ShortName）。
+
+> Azure 与 Edge 是微软同一套 neural 音色，区别在于 **Azure 允许 SSML**，因而能发 `<phoneme>` 精确指定读音。
+> 切到 Azure 后，被朗读文本会发送到**你自己的** Azure 语音资源；不切换则仍然零 API Key。
+
 ---
 
 ## 6. 推荐设置（可直接粘贴）
@@ -131,7 +150,7 @@ voice-mode-adaptation:
   rewriteMaxTokens: 600           # 默认 400（这是「基线」，实际按片段动态上调）
   rewriteCache: false             # 默认 true
   # ── 以下保持默认，列出以便核对 ──
-  ttsEngine: edge
+  ttsEngine: edge                 # 想用 Azure 音素级多音字改成 azure（并配 azureEndpoint/azureKeyRef）
   voice: zh-CN-XiaoxiaoNeural
   rewriteBaseUrl: https://open.bigmodel.cn/api/paas/v4
   rewriteModel: glm-4.5-air
@@ -180,7 +199,7 @@ curl -s http://127.0.0.1:3080/voice-mode-adaptation/
 3. **外放时总被自己打断** → 把 `bargeInMode` 改成 `manual`，或戴耳机。
 4. **公式没走模型** → 检查 `mathMode` 是否为 `model`、`rewriteEnabled` 是否开、Key 是否可用。
 5. **模型下载慢** → 把「模型镜像」（`modelHost`）设为 `https://hf-mirror.com`。
-6. **多音字读错治不了** → 免费 Edge 端点**不支持任何音素级 SSML**（`<break>`/`<phoneme>`/`<say-as>` 会导致直接断流），只能用文本替换表 `pronunciationFixes`；要根治需换本地 Kokoro 或付费 Azure SSML。
+6. **多音字读错治不了** → 免费 Edge 端点**不支持任何音素级 SSML**（`<break>`/`<phoneme>`/`<say-as>` 会导致直接断流），只能用文本替换表 `pronunciationFixes`。要**精确纠音**可切 **Azure 云端（付费）**：见下面「5.1 可选：Azure 付费引擎」。
 7. **纯文字句子没有额外走模型** → 这是设计如此：「整句出稿」只对**含行内公式**的句子生效。
 8. **单行 `$$x$$` 被当成行内公式** → 与渲染器行为一致；只有**多行 `$$` 块**才是行间公式。
 9. **长文有多个结构片段会多次调用外部模型** → 每个展示公式/代码/表格各一次，有延迟与费用，属预期。
