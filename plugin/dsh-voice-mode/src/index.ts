@@ -27,7 +27,7 @@ import { homedir } from 'node:os'
 import { rm } from 'node:fs/promises'
 import { createAsrRuntime, handleAsrRequest } from './asr-host.ts'
 import { SpeechAdapter, type SpeechAdapterConfig } from './speech-adapter.ts'
-import { SpeechRewriter, parseGuardAllow, type GuardAllowRules, type GuardMode } from './rewriter.ts'
+import { SpeechRewriter, parseGuardAllow, rewriteUsage, resetRewriteUsage, type GuardAllowRules, type GuardMode } from './rewriter.ts'
 import { DEFAULT_PRONUNCIATION_TABLE, parsePronunciationFixes, type PronunciationFix } from './segmenter.ts'
 import { EdgeTtsEngine, AzureTtsEngine, TtsQueue, listEdgeVoices, type TtsEngine } from './tts-queue.ts'
 import { parsePhonemeTable } from './azure-ssml.ts'
@@ -937,6 +937,28 @@ export function apply(ctx: Context, config: Config): void {
             respondJson(res, 500, { error: 'store failed: ' + String((e as Error)?.message ?? e) })
           }
         })
+      },
+    }),
+  )
+
+  // --- 累计 token 消耗：仅设置面板查看（进程内累计，重启清零）。GET 读、POST 清零。 ---
+  ctx.effect(() =>
+    ctx.webServer.register({
+      kind: 'exact',
+      path: base + '/usage',
+      handler: (req: IncomingMessage, res: ServerResponse) => {
+        if (denyNonLoopback(req, res)) return
+        if (denyCrossOrigin(req, res)) return
+        if (req.method === 'POST') {
+          if (!limiter.hit('usage-reset:' + (req.socket.remoteAddress ?? 'unknown'), 10, 60000)) {
+            respondJson(res, 429, { error: 'rate limited' })
+            return
+          }
+          resetRewriteUsage()
+          respondJson(res, 200, { ok: true, ...rewriteUsage() })
+          return
+        }
+        respondJson(res, 200, rewriteUsage())
       },
     }),
   )

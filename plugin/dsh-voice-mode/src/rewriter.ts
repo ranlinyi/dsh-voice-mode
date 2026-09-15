@@ -163,6 +163,56 @@ export interface RewriteResult {
   symbols?: RewriteSymbol[]
 }
 
+/** 语音改编站累计 token 消耗（仅进程内累计；模块级，跨 rewriter 重建保留，重启清零）。 */
+export interface RewriteUsage {
+  /** 成功返回的模型调用次数（HTTP 2xx）。 */
+  requests: number
+  /** 成功但端点未返回 usage 的次数（无法计入 token）。 */
+  requestsWithoutUsage: number
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
+const usageStats: RewriteUsage = {
+  requests: 0,
+  requestsWithoutUsage: 0,
+  promptTokens: 0,
+  completionTokens: 0,
+  totalTokens: 0,
+}
+
+/** 读取当前累计（返回副本，避免调用方改到内部状态）。 */
+export function rewriteUsage(): RewriteUsage {
+  return { ...usageStats }
+}
+
+/** 清零累计。 */
+export function resetRewriteUsage(): void {
+  usageStats.requests = 0
+  usageStats.requestsWithoutUsage = 0
+  usageStats.promptTokens = 0
+  usageStats.completionTokens = 0
+  usageStats.totalTokens = 0
+}
+
+/** 记录一次成功调用的 usage（端点未返回 usage 时只计数，不猜）。 */
+function recordUsage(usage: unknown): void {
+  usageStats.requests += 1
+  const u = (usage ?? null) as { prompt_tokens?: unknown; completion_tokens?: unknown; total_tokens?: unknown } | null
+  if (!u || typeof u !== 'object') {
+    usageStats.requestsWithoutUsage += 1
+    return
+  }
+  const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+  const p = num(u.prompt_tokens)
+  const c = num(u.completion_tokens)
+  const t = num(u.total_tokens) || p + c
+  usageStats.promptTokens += p
+  usageStats.completionTokens += c
+  usageStats.totalTokens += t
+}
+
 /** 提示词/行为版本：改变提示词、协议或后处理时递增；缓存键含它，避免跨版本复用旧讲稿。 */
 const PROMPT_VERSION = 'sp10'
 
@@ -657,6 +707,8 @@ export class SpeechRewriter {
     })
     if (!res.ok) return { status: res.status, content: null }
     const data: any = await res.json()
+    // 累计 token 消耗（设置面板可查；成功调用才计数）。
+    recordUsage(data && data.usage)
     const content =
       data && data.choices && data.choices[0] && data.choices[0].message
         ? data.choices[0].message.content

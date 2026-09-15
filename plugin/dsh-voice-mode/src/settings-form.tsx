@@ -89,6 +89,7 @@ const FIELD_LABELS: Record<string, string> = {
   azureKeyRef: 'Azure 密钥引用',
   azureSecret: '写入 Azure 密钥',
   azurePhonemes: 'Azure 多音字拼音表',
+  usageStats: '累计 token 消耗',
 }
 const setHeader: React.CSSProperties = {
   appearance: 'none',
@@ -419,6 +420,77 @@ function CredentialKeyField({ score, field, refValue, defaultRef }: { score: Sco
       </button>
       {status ? <span style={{ fontSize: 11, color: t.term }}>{status}</span> : null}
     </div>
+  )
+}
+
+/** /usage 载荷（语音改编站累计 token 消耗）。 */
+interface UsagePayload {
+  requests: number
+  requestsWithoutUsage: number
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
+/**
+ * 语音改编站累计 token 消耗：只读展示（进程内累计，重启清零）。
+ * 仅出现在设置面板里，不常驻其它界面；5 秒轮询 /usage，另给一个清零按钮。
+ */
+function TokenUsageInline(): React.ReactElement {
+  const [u, setU] = useState<UsagePayload | null>(null)
+  const [busy, setBusy] = useState(false)
+  const load = async (): Promise<void> => {
+    try {
+      const res = await fetch(location.origin + BASE_PATH + '/usage')
+      if (res.ok) setU((await res.json()) as UsagePayload)
+    } catch {
+      // 轮询失败静默
+    }
+  }
+  useEffect(() => {
+    void load()
+    const timer = setInterval(() => void load(), 5000)
+    return () => clearInterval(timer)
+  }, [])
+  const reset = async (): Promise<void> => {
+    setBusy(true)
+    try {
+      await fetch(location.origin + BASE_PATH + '/usage', { method: 'POST' })
+      await load()
+    } catch {
+      // ignore
+    } finally {
+      setBusy(false)
+    }
+  }
+  const n = (x: number | undefined): string => Number(x ?? 0).toLocaleString('en-US')
+  return (
+    <Row name="usageStats" desc={tr('descUsageStats')}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12, color: t.label }}>
+          {tr('usageRequests')} {n(u?.requests)} · {tr('usagePrompt')} {n(u?.promptTokens)} · {tr('usageCompletion')} {n(u?.completionTokens)} · {tr('usageTotal')} {n(u?.totalTokens)}
+        </span>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void reset()}
+          style={{
+            appearance: 'none',
+            border: '1px solid ' + t.border,
+            background: t.bgOpen,
+            color: t.label,
+            borderRadius: 8,
+            padding: '3px 10px',
+            font: 'inherit',
+            fontSize: 11,
+            cursor: busy ? 'default' : 'pointer',
+            opacity: busy ? 0.6 : 1,
+          }}
+        >
+          {tr('usageReset')}
+        </button>
+      </div>
+    </Row>
   )
 }
 
@@ -1294,6 +1366,7 @@ export function VoiceSettingsCard({ scope }: { scope: ScopeController }): React.
             <Row name="blockPauseMs" desc={tr('descBlockPause')}>
               <NumberField score={scope} field="blockPauseMs" value={value.blockPauseMs ?? 350} min={0} max={3000} step={50} />
             </Row>
+            <TokenUsageInline />
             </Section>
             <Section title={tr('secModel')}>
             <Row name="modelHost" desc={tr('descModelHost')}>

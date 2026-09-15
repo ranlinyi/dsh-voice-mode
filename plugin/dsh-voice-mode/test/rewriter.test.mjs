@@ -23,6 +23,7 @@ await build({
 const {
   SpeechRewriter, extractNumbers, verifyNumbers, parseSpeechResponse, contextHash,
   withinLengthLimit, contextEchoRatio, sentenceEchoRatio, prefixEcho, parseGuardAllow,
+  rewriteUsage, resetRewriteUsage,
 } = await import(pathToFileURL(out).href)
 
 let passed = 0
@@ -359,6 +360,37 @@ await t('缓存键含上下文：不同前文不误复用，相同前文可复�
   await r.rewrite({ kind: 'code', text: 'const n = 12', context: { before: '乙'.repeat(50) } })
   await r.rewrite({ kind: 'code', text: 'const n = 12', context: { before: '甲'.repeat(50) } })
   assert.equal(calls, 2)
+})
+
+await t('usage：累计 token 消耗（成功调用计数；端点无 usage 只计数、不猜）', async () => {
+  resetRewriteUsage()
+  const withUsage = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{ message: { content: J({ speech: '甲' }) } }],
+      usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+    }),
+  })
+  const r = new SpeechRewriter({ baseUrl: 'https://x.test/v1', apiKey: '', model: 'm', cache: false, fetchImpl: withUsage })
+  await r.rewrite({ kind: 'inline-math', text: 'a+b' })
+  await r.rewrite({ kind: 'inline-math', text: 'c+d' })
+  let u = rewriteUsage()
+  assert.equal(u.requests, 2)
+  assert.equal(u.promptTokens, 200)
+  assert.equal(u.completionTokens, 40)
+  assert.equal(u.totalTokens, 240)
+  // 端点不返回 usage：requests 计数、token 不变、requestsWithoutUsage 递增
+  const r2 = new SpeechRewriter({ baseUrl: 'https://x.test/v1', apiKey: '', model: 'm', cache: false, fetchImpl: okFetch(J({ speech: '乙' })) })
+  await r2.rewrite({ kind: 'inline-math', text: 'e+f' })
+  u = rewriteUsage()
+  assert.equal(u.requests, 3)
+  assert.equal(u.requestsWithoutUsage, 1)
+  assert.equal(u.totalTokens, 240)
+  // 返回副本：外部修改不影响内部状态
+  u.requests = 999
+  assert.equal(rewriteUsage().requests, 3)
+  resetRewriteUsage()
+  assert.equal(rewriteUsage().requests, 0)
 })
 
 console.log('\nrewriter：' + passed + ' 项通过')
