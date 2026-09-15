@@ -12,6 +12,7 @@
  * chunk 到达时被丢弃，实现真正的静音。
  */
 import { MsEdgeTTS, OUTPUT_FORMAT, type ProsodyOptions } from 'msedge-tts'
+import { buildAzureSsml, normalizeAzureEndpoint, type PhonemeRule } from './azure-ssml.ts'
 
 /** 合成引擎统一接口（云端/本地实现互替）。 */
 export interface TtsEngine {
@@ -53,7 +54,7 @@ export interface TtsModelGroup {
 /** 引擎/模型现状（设置面板轮询）。 */
 export interface TtsEngineStatus {
   /** 当前生效引擎。 */
-  engine: 'edge' | 'vits' | 'kokoro'
+  engine: 'edge' | 'vits' | 'kokoro' | 'azure'
   /** 当前引擎是否就绪（本地：模型校验 + 子进程 init；edge：恒 true）。 */
   ready: boolean
   /** 当前引擎正在初始化/加载。 */
@@ -99,7 +100,10 @@ function prosodyFromRate(rate?: number): ProsodyOptions | undefined {
 
 /** 合法 MP3 帧以同步字开头；空音频（如英文音色读不了中文）视同无效。 */
 function isValidMp3(buf: Buffer): boolean {
-  return buf.length > 0 && buf[0] === MP3_MAGIC
+  if (buf.length === 0) return false
+  if (buf[0] === MP3_MAGIC) return true
+  // 部分服务会加 ID3v2 标签头（"ID3"）——同样是合法 MP3（Azure 可能如此）。
+  return buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33
 }
 
 /** Edge TTS 引擎（微软语音服务，云端；被朗读文本发送到微软）。 */
@@ -144,6 +148,83 @@ export class EdgeTtsEngine implements TtsEngine {
 
   async close(): Promise<void> {
     // 无持久连接（每句独立连接），无需清理。
+  }
+}
+
+/** Azure Speech 配置（端点/密钥/拼音表都用 getter：设置改动实时生效，无需重建引擎）。 */
+export interface AzureEngineOptions {
+  /** 端点或区域名（getter）。 */
+  endpoint: () => string
+  /** 解析订阅密钥（凭据库优先、环境变量兜底；明文不落配置）。 */
+  resolveKey: () => Promise<string>
+  /** 多音字拼音表（getter）。 */
+  phonemes?: () => PhonemeRule[]
+  voice: string
+  rate?: number
+  /** 请求超时毫秒（默认 15000）。 */
+  timeoutMs?: number
+}
+
+/**
+ * Azure Speech TTS 引擎（付费云端）：与 Edge 同一批 neural 音色，但支持 SSML——
+ * 语速 prosody + 多音字 <phoneme>（Edge 免费端点不支持任何音素级 SSML）。
+ * 端点 / 密钥 / 拼音表均按 getter 实时读取，只有切换引擎才需要重建。
+ */
+export class AzureTtsEngine implements TtsEngine {
+  private voice: string
+  private rate?: number
+
+  constructor(private readonly opts: AzureEngineOptions) {
+    this.voice = opts.voice
+    this.rate = opts.rate
+  }
+
+  readonly mime = 'audio/mpeg'
+
+  updateVoice(voice: string, rate?: number): void {
+    if (voice) this.voice = voice
+    if (rate !== undefined && Number.isFinite(rate)) this.rate = rate
+  }
+
+  async synthesize(text: string, options: { voice?: string; rate?: number } = {}): Promise<Buffer> {
+    const endpoint = normalizeAzureEndpoint(this.opts.endpoint())
+    if (!endpoint) throw new Error('Azure endpoint is not configured')
+    const key = (await this.opts.resolveKey()).trim()
+    if (!key) throw new Error('Azure key is not configured')
+    const ssml = buildAzureSsml({
+      text,
+      voice: options.voice ?? this.voice,
+      rate: options.rate ?? this.rate,
+      phonemes: this.opts.phonemes?.() ?? [],
+    })
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), this.opts.timeoutMs ?? 15000)
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Ocp-Apim-Subscription-Key': key,
+          'Content-Type': 'application/ssml+xml',
+          'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
+          'User-Agent': 'dsh-voice-mode-adaptation',
+        },
+        body: ssml,
+        signal: ctrl.signal,
+      })
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '')
+        throw new Error('Azure TTS HTTP ' + res.status + (detail ? ': ' + detail.slice(0, 200) : ''))
+      }
+      const buf = Buffer.from(await res.arrayBuffer())
+      if (!isValidMp3(buf)) throw new Error('empty or invalid audio')
+      return buf
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  async close(): Promise<void> {
+    // 每句独立 HTTP 请求，无持久连接。
   }
 }
 

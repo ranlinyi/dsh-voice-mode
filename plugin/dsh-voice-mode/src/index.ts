@@ -29,7 +29,8 @@ import { createAsrRuntime, handleAsrRequest } from './asr-host.ts'
 import { SpeechAdapter, type SpeechAdapterConfig } from './speech-adapter.ts'
 import { SpeechRewriter, parseGuardAllow, type GuardAllowRules, type GuardMode } from './rewriter.ts'
 import { DEFAULT_PRONUNCIATION_TABLE, parsePronunciationFixes, type PronunciationFix } from './segmenter.ts'
-import { EdgeTtsEngine, TtsQueue, listEdgeVoices, type TtsEngine } from './tts-queue.ts'
+import { EdgeTtsEngine, AzureTtsEngine, TtsQueue, listEdgeVoices, type TtsEngine } from './tts-queue.ts'
+import { parsePhonemeTable } from './azure-ssml.ts'
 import { createSherpaVitsEngine, createSherpaKokoroEngine, TTS_MODEL_REPO, kokoroModelDir, type KokoroModel } from './tts-local.ts'
 import { HOST_PRIMARY, validateModelHost } from './models.ts'
 import { isLoopbackRequest, sameOriginRequest, RateLimiter } from './security.ts'
@@ -106,10 +107,16 @@ const defaultModelCacheDir = (): string =>
  * （每次组装提示词时读取，对当前会话的后续回复生效）；其余下次进入生效。
  */
 export interface VoiceSettingsValue {
-  /** 朗读引擎：edge 微软云端（默认）/ vits 本地中文 / kokoro 本地中英；设置面板即时切换。 */
-  ttsEngine: 'edge' | 'vits' | 'kokoro'
+  /** 朗读引擎：edge 微软云端（默认）/ vits 本地中文 / kokoro 本地中英 / azure 付费云端（支持 SSML 音素）；设置面板即时切换。 */
+  ttsEngine: 'edge' | 'vits' | 'kokoro' | 'azure'
   /** Kokoro 模型精度（int8 默认 / fp32 音质更好；仅 kokoro 引擎生效，切换即时重建引擎）。 */
   kokoroModel: KokoroModel
+  /** Azure 朗读端点：区域名（如 eastasia）或完整链接；仅 azure 引擎使用。 */
+  azureEndpoint: string
+  /** Azure 密钥的凭据引用（环境变量名；密钥不落配置明文）。 */
+  azureKeyRef: string
+  /** Azure 多音字拼音表：每行「词 => 拼音」（如 行 => hang2），# 起首为注释；仅 azure 引擎使用。 */
+  azurePhonemes: string
   voice: string
   rate: number
   interruptLevel: 0 | 1 | 2
@@ -191,6 +198,9 @@ export interface VoiceSettingsValue {
 const VOICE_SETTINGS_DEFAULTS: VoiceSettingsValue = {
   ttsEngine: 'edge',
   kokoroModel: 'int8',
+  azureEndpoint: '',
+  azureKeyRef: '',
+  azurePhonemes: '',
   voice: 'zh-CN-XiaoxiaoNeural',
   rate: 1.0,
   interruptLevel: 0,
@@ -231,10 +241,10 @@ export function createVoiceSettingsSchema(defs?: Partial<VoiceSettingsValue>): z
   const d = { ...VOICE_SETTINGS_DEFAULTS, ...defs }
   return z.object({
     ttsEngine: z
-      .union([z.const('vits'), z.const('kokoro'), z.const('edge')])
+      .union([z.const('vits'), z.const('kokoro'), z.const('edge'), z.const('azure')])
       .default(d.ttsEngine)
       .description(
-        '朗读引擎：edge 微软云端（默认，快、音质自然，被朗读文本会发送到微软）/ vits 本地中文 / kokoro 本地中英（回复文本不出本机）；切换即时生效',
+        '朗读引擎：edge 微软云端（默认，快、音质自然，被朗读文本会发送到微软）/ vits 本地中文 / kokoro 本地中英（回复文本不出本机）/ azure 付费云端（需端点+密钥；支持 SSML 音素级多音字）；切换即时生效',
       ),
     kokoroModel: z
       .union([z.const('int8'), z.const('fp32')])
@@ -242,6 +252,18 @@ export function createVoiceSettingsSchema(defs?: Partial<VoiceSettingsValue>): z
       .description(
         'Kokoro 模型精度：int8（默认，体积小/加载快，CPU 友好）/ fp32（音质更好、体积大，GPU 或大内存机器推荐）；两档共用同一套 103 音色，切换即时生效',
       ),
+    azureEndpoint: z
+      .string()
+      .default(d.azureEndpoint)
+      .description('Azure 朗读端点：填区域名（如 eastasia）或完整链接（https://<region>.tts.speech.microsoft.com）；仅 azure 引擎使用'),
+    azureKeyRef: z
+      .string()
+      .default(d.azureKeyRef)
+      .description('Azure 密钥的凭据引用名（如 AZURE_SPEECH_KEY）；真实密钥写入 DSH 凭据库，不落配置文件明文'),
+    azurePhonemes: z
+      .string()
+      .default(d.azurePhonemes)
+      .description('Azure 多音字拼音表：每行「词 => 拼音」（如 行 => hang2、银行 => yin2 hang2），# 起首为注释；经 SSML <phoneme> 精确发音，仅 azure 引擎使用'),
     voice: z
       .string()
       .default(d.voice)
@@ -381,8 +403,8 @@ export interface Config {
   cacheDir: string
   /** 模型上游 host；huggingface.co / hf-mirror.com 均可达（§4 已验证）。 */
   modelHost: string
-  /** 朗读引擎：edge（微软云端，默认）/ vits（本地中文）/ kokoro（本地中英，回复文本不出本机）。 */
-  ttsEngine: 'edge' | 'vits' | 'kokoro'
+  /** 朗读引擎：edge（微软云端，默认）/ vits（本地中文）/ kokoro（本地中英，回复文本不出本机）/ azure（付费云端，SSML 音素）。 */
+  ttsEngine: 'edge' | 'vits' | 'kokoro' | 'azure'
   /** Kokoro 模型精度（int8 默认 / fp32 音质更好）。 */
   kokoroModel: KokoroModel
   /** 允许局域网访问 /voice-mode-adaptation/*（默认仅回环；开启后建议前置认证门）。 */
@@ -405,7 +427,7 @@ export const Config: z<Config> = z.object({
   enabled: z.boolean().default(true),
   cacheDir: z.string().default(defaultModelCacheDir()),
   modelHost: z.string().default('https://huggingface.co'),
-  ttsEngine: z.union([z.const('edge'), z.const('vits'), z.const('kokoro')]).default('edge'),
+  ttsEngine: z.union([z.const('edge'), z.const('vits'), z.const('kokoro'), z.const('azure')]).default('edge'),
   kokoroModel: z.union([z.const('int8'), z.const('fp32')]).default('int8'),
   allowLan: z.boolean().default(false),
   allowCustomModelHost: z.boolean().default(false),
@@ -519,9 +541,9 @@ export function apply(ctx: Context, config: Config): void {
     guardAllow = parseGuardAllow(raw)
   }
   syncGuard()
-  /** 解析改写密钥：ctx.credentials（环境变量名引用）优先，process.env 兜底。 */
-  const resolveRewriteKey = async (): Promise<string> => {
-    const raw = vset.rewriteApiKeyRef.trim()
+  /** 通用凭据解析：合法引用名走 DSH 凭据库（再退环境变量）；其它形态按字面密钥。 */
+  const resolveCredential = async (rawRef: string): Promise<string> => {
+    const raw = String(rawRef ?? '').trim()
     if (!raw) return ''
     // 合法凭据引用（环境变量名）：走 DSH 凭据机制，再退环境变量。
     if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(raw)) {
@@ -541,6 +563,10 @@ export function apply(ctx: Context, config: Config): void {
     // 其它形态：按字面密钥使用（GUI 直接粘贴密钥的便捷路径）。
     return raw
   }
+  /** 解析改写密钥（明文不落配置）。 */
+  const resolveRewriteKey = (): Promise<string> => resolveCredential(vset.rewriteApiKeyRef)
+  /** 解析 Azure 订阅密钥（明文不落配置）。 */
+  const resolveAzureKey = (): Promise<string> => resolveCredential(vset.azureKeyRef)
   /** 仅在连接配置变化时重建（保留缓存）；开关关闭则置空。 */
   const rebuildRewriter = (): void => {
     const s = vset
@@ -613,8 +639,17 @@ export function apply(ctx: Context, config: Config): void {
   void asr.warmup()
 
   // --- TTS 引擎工厂（fork：edge 云端 / vits 本地中文 / kokoro 本地中英；设置面板即时切换）。 ---
-  const makeEngine = (kind: 'edge' | 'vits' | 'kokoro'): TtsEngine => {
+  const makeEngine = (kind: 'edge' | 'vits' | 'kokoro' | 'azure'): TtsEngine => {
     if (kind === 'edge') return new EdgeTtsEngine(config.voice, config.rate)
+    if (kind === 'azure') {
+      return new AzureTtsEngine({
+        endpoint: () => vset.azureEndpoint,
+        resolveKey: resolveAzureKey,
+        phonemes: () => parsePhonemeTable(vset.azurePhonemes).rules,
+        voice: vset.voice || config.voice,
+        rate: vset.rate,
+      })
+    }
     if (kind === 'kokoro') {
       return createSherpaKokoroEngine({
         cacheDir: config.cacheDir,
@@ -631,7 +666,7 @@ export function apply(ctx: Context, config: Config): void {
       broadcast,
     })
   }
-  let engineKind: 'edge' | 'vits' | 'kokoro' = vset.ttsEngine ?? config.ttsEngine
+  let engineKind: 'edge' | 'vits' | 'kokoro' | 'azure' = vset.ttsEngine ?? config.ttsEngine
   let activeKokoroModel: KokoroModel = vset.kokoroModel
 
   // --- TTS 队列（§8.4）：逐句合成后经 SSE 广播；epoch 机制支撑打断。 ---
@@ -671,7 +706,7 @@ export function apply(ctx: Context, config: Config): void {
   const currentVoice = (): string => vset.voice
   const currentRate = (): number => vset.rate
   const currentInterrupt = (): 0 | 1 | 2 => vset.interruptLevel
-  const currentEngine = (): 'edge' | 'vits' | 'kokoro' => engineKind
+  const currentEngine = (): 'edge' | 'vits' | 'kokoro' | 'azure' => engineKind
 
   /** B2：host 侧让出活跃会话（等价 /toggle off 的清理）。owner tab 失联超时调用。 */
   const yieldActiveSession = (expectedSid?: string | null): void => {
@@ -745,9 +780,10 @@ export function apply(ctx: Context, config: Config): void {
           name: 'dsh-voice-mode-adaptation',
           enabled: config.enabled,
           active: activeVoiceSession,
-          // 被拒绝的替代表行 / 放行规则行：给用户可见反馈，而不是静默忽略。
+          // 被拒绝的替代表行 / 放行规则行 / Azure 拼音表行：给用户可见反馈，而不是静默忽略。
           pronunciationErrors,
           guardErrors: guardAllow.errors,
+          azurePhonemeErrors: parsePhonemeTable(vset.azurePhonemes).errors,
         })
       },
     }),

@@ -85,6 +85,10 @@ const FIELD_LABELS: Record<string, string> = {
   blockPauseMs: '段落停顿',
   wholeSentenceMath: '整句公式出稿',
   rewriteSecret: '写入密钥',
+  azureEndpoint: 'Azure 端点',
+  azureKeyRef: 'Azure 密钥引用',
+  azureSecret: '写入 Azure 密钥',
+  azurePhonemes: 'Azure 多音字拼音表',
 }
 const setHeader: React.CSSProperties = {
   appearance: 'none',
@@ -225,6 +229,7 @@ const ENGINE_DEFAULT_VOICE: Record<string, string> = {
   vits: 'suyingxue',
   kokoro: 'zf_xiaobei',
   edge: 'zh-CN-XiaoxiaoNeural',
+  azure: 'zh-CN-XiaoxiaoNeural',
 }
 
 const HOST_OPTIONS: Array<{ v: string; label: string }> = [
@@ -347,12 +352,12 @@ function TextAreaField({
  * 改写密钥输入：GUI 输入 → 宿主写入 DSH 凭据库（settings 只存引用名，明文不落配置）。
  * 保存成功后清空输入框；密钥值不回显。
  */
-function RewriteKeyField({ score, refValue }: { score: ScopeController; refValue: string }): React.ReactElement {
+function CredentialKeyField({ score, field, refValue, defaultRef }: { score: ScopeController; field: string; refValue: string; defaultRef: string }): React.ReactElement {
   const [secret, setSecret] = useState('')
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
   const save = async (): Promise<void> => {
-    const ref = /^[A-Za-z_][A-Za-z0-9_]*$/.test(refValue.trim()) ? refValue.trim() : 'GLM_API_KEY'
+    const ref = /^[A-Za-z_][A-Za-z0-9_]*$/.test(refValue.trim()) ? refValue.trim() : defaultRef
     const value = secret.trim()
     if (!value) {
       setStatus('请先输入密钥')
@@ -369,7 +374,7 @@ function RewriteKeyField({ score, refValue }: { score: ScopeController; refValue
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string }
       if (res.ok && data.ok) {
         setSecret('')
-        if (refValue.trim() !== ref) void score.set('rewriteApiKeyRef', ref)
+        if (refValue.trim() !== ref) void score.set(field, ref)
         setStatus('已保存到 DSH 凭据库（' + ref + '）')
       } else {
         setStatus('保存失败：' + String(data.error ?? res.status))
@@ -780,7 +785,7 @@ interface ModelsStatusPayload {
   vad: { repo: string; ready: boolean; size: number; failLatchMs: number }
   sense: { repo: string; ready: boolean; size: number; failLatchMs: number; enabled: boolean }
   tts: {
-    engine: 'edge' | 'vits' | 'kokoro'
+    engine: 'edge' | 'vits' | 'kokoro' | 'azure'
     ready: boolean
     loading: boolean
     error?: string
@@ -818,7 +823,7 @@ function EngineStatusInline(): React.ReactElement {
   }, [])
   const tts = st?.tts
   if (!tts) return <></>
-  const engineName = tts.engine === 'vits' ? tr('engineVits') : tts.engine === 'kokoro' ? tr('engineKokoro') : tr('engineEdge')
+  const engineName = tts.engine === 'vits' ? tr('engineVits') : tts.engine === 'kokoro' ? tr('engineKokoro') : tts.engine === 'azure' ? tr('engineAzure') : tr('engineEdge')
   const isLocal = !!tts.local
   // 就绪以「本地模型文件是否已下载」为准：切换引擎不动本地文件，
   // 故一次下载后（只要不点「删除」）跨引擎始终保持就绪（用户契约）。
@@ -1015,11 +1020,11 @@ export function VoiceSettingsCard({ scope }: { scope: ScopeController }): React.
   const value = (snap?.value ?? {}) as Record<string, unknown>
   const unavailable = snap?.status === 'unavailable' || snap?.status === 'error'
   // 朗读引擎（设置项，即时生效）：决定音色列表与试听行为。
-  const engine = value.ttsEngine === 'edge' ? 'edge' : value.ttsEngine === 'kokoro' ? 'kokoro' : 'vits'
+  const engine = value.ttsEngine === 'edge' ? 'edge' : value.ttsEngine === 'azure' ? 'azure' : value.ttsEngine === 'kokoro' ? 'kokoro' : 'vits'
   // Edge 全量音色：选 Edge 时从 /voices 拉取（几百个），失败回退常用 14 个。
   const [edgeVoices, setEdgeVoices] = useState<Array<{ v: string; label: string }> | null>(null)
   useEffect(() => {
-    if (engine !== 'edge') return
+    if (engine !== 'edge' && engine !== 'azure') return
     let alive = true
     void fetch(location.origin + BASE_PATH + '/voices')
       .then((res) => (res.ok ? (res.json() as Promise<{ voices?: Array<{ ShortName: string; FriendlyName: string; Locale: string; Gender: string }> }>) : null))
@@ -1048,7 +1053,7 @@ export function VoiceSettingsCard({ scope }: { scope: ScopeController }): React.
       alive = false
     }
   }, [engine])
-  const voiceOptions = engine === 'edge' ? (edgeVoices ?? VOICE_OPTIONS) : engine === 'kokoro' ? VOICE_OPTIONS_KOKORO : VOICE_OPTIONS_LOCAL
+  const voiceOptions = engine === 'edge' || engine === 'azure' ? (edgeVoices ?? VOICE_OPTIONS) : engine === 'kokoro' ? VOICE_OPTIONS_KOKORO : VOICE_OPTIONS_LOCAL
 
   if (unavailable) {
     return (
@@ -1086,6 +1091,7 @@ export function VoiceSettingsCard({ scope }: { scope: ScopeController }): React.
                   { v: 'vits', label: tr('engineVits') },
                   { v: 'kokoro', label: tr('engineKokoro') },
                   { v: 'edge', label: tr('engineEdge') },
+                  { v: 'azure', label: tr('engineAzure') },
                 ]}
                 onSelect={(v) => {
                   // 引擎语义不同：仅在引擎真正切换时重置音色；
@@ -1097,6 +1103,22 @@ export function VoiceSettingsCard({ scope }: { scope: ScopeController }): React.
               />
             </Row>
             <EngineStatusInline />
+            {engine === 'azure' && (
+              <>
+                <Row name="azureEndpoint" desc={tr('descAzureEndpoint')}>
+                  <TextField score={scope} field="azureEndpoint" value={String(value.azureEndpoint ?? '')} placeholder="eastasia 或 https://eastasia.tts.speech.microsoft.com" />
+                </Row>
+                <Row name="azureKeyRef" desc={tr('descAzureKeyRef')}>
+                  <TextField score={scope} field="azureKeyRef" value={String(value.azureKeyRef ?? '')} placeholder="AZURE_SPEECH_KEY" />
+                </Row>
+                <Row name="azureSecret" desc={tr('descAzureSecret')}>
+                  <CredentialKeyField score={scope} field="azureKeyRef" refValue={String(value.azureKeyRef ?? '')} defaultRef="AZURE_SPEECH_KEY" />
+                </Row>
+                <Row name="azurePhonemes" desc={tr('descAzurePhonemes')}>
+                  <TextAreaField score={scope} field="azurePhonemes" value={String(value.azurePhonemes ?? '')} placeholder={'行 => hang2\n银行 => yin2 hang2'} rows={4} />
+                </Row>
+              </>
+            )}
             {engine === 'kokoro' && (
               <Row name="kokoroModel" desc={tr('descKokoroModel')}>
                 <SegGroup
@@ -1112,7 +1134,7 @@ export function VoiceSettingsCard({ scope }: { scope: ScopeController }): React.
             )}
             <Row
               name="voice"
-              desc={engine === 'edge' ? tr('descVoice') : engine === 'kokoro' ? tr('descVoiceKokoro') : tr('descVoiceLocal')}
+              desc={engine === 'edge' ? tr('descVoice') : engine === 'azure' ? tr('descVoiceAzure') : engine === 'kokoro' ? tr('descVoiceKokoro') : tr('descVoiceLocal')}
             >
               <VoiceSelect
                 score={scope}
@@ -1120,7 +1142,7 @@ export function VoiceSettingsCard({ scope }: { scope: ScopeController }): React.
                 value={value.voice ?? ''}
                 options={voiceOptions}
                 placeholder={ENGINE_DEFAULT_VOICE[engine] ?? 'zh-CN-XiaoxiaoNeural'}
-                showCustom={engine === 'edge'}
+                showCustom={engine === 'edge' || engine === 'azure'}
                 footer={(v) => <VoicePreviewButton voice={v} rate={Number(value.rate ?? 1)} />}
               />
             </Row>
@@ -1209,7 +1231,7 @@ export function VoiceSettingsCard({ scope }: { scope: ScopeController }): React.
               <TextField score={scope} field="rewriteApiKeyRef" value={value.rewriteApiKeyRef ?? ''} placeholder="GLM_API_KEY" />
             </Row>
             <Row name="rewriteSecret" desc={tr('descRewriteSecret')}>
-              <RewriteKeyField score={scope} refValue={String(value.rewriteApiKeyRef ?? '')} />
+              <CredentialKeyField score={scope} field="rewriteApiKeyRef" refValue={String(value.rewriteApiKeyRef ?? '')} defaultRef="GLM_API_KEY" />
             </Row>
             <Row name="rewriteModel" desc={tr('descRewriteModel')}>
               <TextField score={scope} field="rewriteModel" value={value.rewriteModel ?? ''} placeholder="glm-4.5-air" />
